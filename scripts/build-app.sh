@@ -33,10 +33,35 @@ STAGE_APP="$WORK_TMP/SpacedOut.app"
 echo "==> Assembling $APP_BUNDLE..."
 mkdir -p "$STAGE_APP/Contents/MacOS" "$STAGE_APP/Contents/Resources"
 
+if grep -q '\$(' "$ROOT_DIR/AppResources/Info.plist" || ! grep -q 'LSUIElement' "$ROOT_DIR/AppResources/Info.plist"; then
+  if git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Note: Restoring AppResources/Info.plist from git HEAD (was overwritten with placeholders/missing keys)..." >&2
+    git -C "$ROOT_DIR" checkout HEAD -- AppResources/Info.plist
+  else
+    echo "Error: AppResources/Info.plist contains unexpanded placeholders or is incomplete." >&2
+    exit 1
+  fi
+fi
+
+if ! grep -q 'personal-information.calendars' "$ROOT_DIR/AppResources/SpacedOut.entitlements"; then
+  if git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Note: Restoring AppResources/SpacedOut.entitlements from git HEAD..." >&2
+    git -C "$ROOT_DIR" checkout HEAD -- AppResources/SpacedOut.entitlements
+  fi
+fi
+
 cp -f "$BIN_PATH" "$STAGE_APP/Contents/MacOS/SpacedOut"
 chmod 755 "$STAGE_APP/Contents/MacOS/SpacedOut"
 cp -f "$ROOT_DIR/AppResources/Info.plist" "$STAGE_APP/Contents/Info.plist"
 plutil -lint "$STAGE_APP/Contents/Info.plist" >/dev/null
+
+if [[ -x /usr/libexec/PlistBuddy ]]; then
+  BUNDLE_EXE="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$STAGE_APP/Contents/Info.plist" 2>/dev/null || true)"
+  if [[ "$BUNDLE_EXE" != "SpacedOut" ]]; then
+    echo "Error: CFBundleExecutable in Info.plist is '$BUNDLE_EXE' (expected 'SpacedOut')." >&2
+    exit 1
+  fi
+fi
 
 ICON_COMPILED=0
 if command -v xcrun >/dev/null 2>&1 && xcrun --find actool >/dev/null 2>&1; then

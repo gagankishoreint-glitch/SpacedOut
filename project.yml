@@ -26,18 +26,15 @@ targets:
     sources:
       - path: Sources/SpacedOutApp
       - path: AppResources/AppIcon.icon
-    info:
-      path: AppResources/Info.plist
-    entitlements:
-      path: AppResources/SpacedOut.entitlements
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.spacedout.app
         PRODUCT_NAME: SpacedOut
+        INFOPLIST_FILE: AppResources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: AppResources/SpacedOut.entitlements
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
-        INFOPLIST_KEY_CFBundleDisplayName: SpacedOut
-        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: "-"

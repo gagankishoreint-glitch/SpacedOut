@@ -39,6 +39,13 @@ run: app
 
 xcode:
 	@command -v xcodegen >/dev/null 2>&1 || { echo "Install XcodeGen first: brew install xcodegen"; exit 1; }
+	@if [ -f AppResources/Info.plist ] && { grep -q '\$$(' AppResources/Info.plist || ! grep -q 'LSUIElement' AppResources/Info.plist; }; then \
+	  echo "Note: Restoring AppResources/Info.plist from git HEAD before xcodegen..."; \
+	  git checkout HEAD -- AppResources/Info.plist || true; \
+	fi
+	@if [ -f AppResources/SpacedOut.entitlements ] && ! grep -q 'personal-information.calendars' AppResources/SpacedOut.entitlements; then \
+	  git checkout HEAD -- AppResources/SpacedOut.entitlements || true; \
+	fi
 	xcodegen generate
 	open SpacedOut.xcodeproj
 
