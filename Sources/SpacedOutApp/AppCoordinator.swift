@@ -81,15 +81,13 @@ final class AppCoordinator {
         registerCurrentHotkey()
         applyDisplayMode(engine.settings.displayMode, initialLaunch: true)
 
-        // Wake & timer tick resilience
+        // re-evaluate immediately after sleep so overdue alerts don't wait
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
-                self?.evaluateTimersNow()
-            }
+            Task { @MainActor in self?.evaluateTimersNow() }
         }
 
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
@@ -114,8 +112,6 @@ final class AppCoordinator {
         }
         hotkeyManager.shutdown()
     }
-
-    // MARK: - Window & UI Presentation
 
     func showFloatingWidget(focusInput: Bool = false) {
         floatingWidgetController?.show(focusInput: focusInput)
@@ -181,8 +177,6 @@ final class AppCoordinator {
         engine.updateSettings { $0.widgetOrigin = nil }
         floatingWidgetController?.resetToDefaultPosition()
     }
-
-    // MARK: - Actions
 
     @discardableResult
     func createQuickReminder(from rawInput: String) -> ReminderItem {
@@ -292,7 +286,6 @@ final class AppCoordinator {
             engine.updateSettings { $0.globalShortcut = binding }
         } else {
             lastHotkeyError = "Could not register \(binding.displayString). Another app or macOS shortcut may already own it."
-            // Restore previous working shortcut
             _ = hotkeyManager.register(binding: engine.settings.globalShortcut) { [weak self] in
                 self?.togglePrimaryViaHotkey()
             }
@@ -331,8 +324,6 @@ final class AppCoordinator {
         )
         try? content.write(to: url, atomically: true, encoding: .utf8)
     }
-
-    // MARK: - Internal Engine Wiring
 
     var currentAlertItem: ReminderItem? {
         testPreviewReminder ?? engine.triggeredQueue.first

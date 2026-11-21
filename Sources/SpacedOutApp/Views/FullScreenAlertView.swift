@@ -32,7 +32,6 @@ struct FullScreenAlertView: View {
                 state: .active
             )
 
-            // Calm frosted emerald-tinted veil
             (scheme == .dark
                 ? Color(red: 0.03, green: 0.08, blue: 0.06).opacity(0.68)
                 : Color(red: 0.88, green: 0.98, blue: 0.92).opacity(0.62))
@@ -42,7 +41,6 @@ struct FullScreenAlertView: View {
                 VStack(spacing: 28) {
                     Spacer()
 
-                    // Gentle breathing halo icon
                     ZStack {
                         Circle()
                             .stroke(accent.opacity(0.20), lineWidth: 2)
@@ -66,7 +64,6 @@ struct FullScreenAlertView: View {
                         }
                     }
 
-                    // Eyebrow + Queue indicator
                     HStack(spacing: 8) {
                         Text(coordinator.testPreviewReminder != nil ? "ALERT PREVIEW" : "TIME'S UP")
                             .font(.system(size: 12, weight: .bold))
@@ -84,14 +81,12 @@ struct FullScreenAlertView: View {
                         }
                     }
 
-                    // Giant legible reminder title
                     Text(item.displayTitle)
                         .font(.system(size: 42, weight: .semibold, design: .rounded))
                         .multilineTextAlignment(.center)
                         .foregroundStyle(inkPrimary)
                         .frame(maxWidth: 680)
 
-                    // Live overdue duration readout
                     TimelineView(.periodic(from: .now, by: 1.0)) { context in
                         let elapsedOverdue = item.formattedRemaining(at: context.date)
                         HStack(spacing: 10) {
@@ -105,7 +100,6 @@ struct FullScreenAlertView: View {
                         .foregroundStyle(inkSecondary)
                     }
 
-                    // Action Buttons
                     VStack(spacing: 14) {
                         Button {
                             coordinator.resolveAlert(id: item.id, action: .complete)
@@ -124,7 +118,6 @@ struct FullScreenAlertView: View {
                         .buttonStyle(.plain)
                         .contentShape(Capsule())
 
-                        // Instant Snooze Pills
                         HStack(spacing: 10) {
                             SnoozePillButton(title: "+1m", shortcutHint: "1", scheme: scheme) {
                                 coordinator.resolveAlert(id: item.id, action: .snooze(seconds: 60))

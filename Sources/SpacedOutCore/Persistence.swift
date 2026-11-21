@@ -42,7 +42,7 @@ public final class AtomicJSONStore: StatePersisting, @unchecked Sendable {
         do {
             return try decoder.decode(PersistedState.self, from: data)
         } catch {
-            // Preserve corrupted payload for diagnostics rather than silently deleting history
+            // keep a backup of corrupt data instead of silently wiping history
             let backupName = "state.corrupt.\(Int(Date().timeIntervalSince1970)).json"
             let backupURL = fileURL.deletingLastPathComponent().appendingPathComponent(backupName)
             try? data.write(to: backupURL, options: .atomic)

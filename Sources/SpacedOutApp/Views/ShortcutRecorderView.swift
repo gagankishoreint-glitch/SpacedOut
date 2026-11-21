@@ -70,7 +70,7 @@ struct ShortcutRecorderView: View {
             let mods = GlobalHotkeyManager.hotkeyModifiers(from: event.modifierFlags)
             let isFunctionKey = Self.functionKeyCodes.contains(Int(event.keyCode))
 
-            // Require at least one modifier key for normal keys so typing isn't intercepted
+            // don't steal plain typing unless it's an F-key
             guard !mods.isEmpty || isFunctionKey else {
                 NSSound.beep()
                 return nil

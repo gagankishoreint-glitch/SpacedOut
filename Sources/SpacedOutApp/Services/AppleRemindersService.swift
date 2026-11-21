@@ -109,8 +109,6 @@ final class AppleRemindersService: RemindersSyncProviding {
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
-    // MARK: - RemindersSyncProviding
-
     func syncCreated(_ reminder: ReminderItem) async -> String? {
         guard await ensureAuthorized() else { return nil }
         guard let calendar = resolveTargetCalendar() else { return nil }
@@ -195,8 +193,6 @@ final class AppleRemindersService: RemindersSyncProviding {
         }
     }
 
-    // MARK: - Helpers
-
     private func ensureAuthorized() async -> Bool {
         refreshStatus()
         if authState == .authorized { return true }
@@ -212,7 +208,6 @@ final class AppleRemindersService: RemindersSyncProviding {
             return existing
         }
 
-        // Create dedicated reminder list if possible
         if let source = eventStore.defaultCalendarForNewReminders()?.source
             ?? eventStore.sources.first(where: { $0.sourceType == .calDAV || $0.sourceType == .local }) {
             let created = EKCalendar(for: .reminder, eventStore: eventStore)
@@ -223,7 +218,7 @@ final class AppleRemindersService: RemindersSyncProviding {
                 reloadLists()
                 return created
             } catch {
-                // Fall back to default reminders list if account disallows custom lists
+                // some accounts reject custom reminder lists, fall back below
             }
         }
 

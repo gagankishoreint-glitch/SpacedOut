@@ -49,15 +49,11 @@ public final class TimerEngine {
         self.syncProvider = provider
     }
 
-    // MARK: - Derived Collections
-
     public var activeOrPausedReminders: [ReminderItem] {
         reminders
             .filter { $0.status == .active || $0.status == .paused }
             .sorted { lhs, rhs in
-                if lhs.status != rhs.status {
-                    return lhs.status == .active
-                }
+                if lhs.status != rhs.status { return lhs.status == .active }
                 return lhs.targetDate < rhs.targetDate
             }
     }
@@ -87,8 +83,6 @@ public final class TimerEngine {
             .min { $0.targetDate < $1.targetDate }
     }
 
-    // MARK: - Creation
-
     @discardableResult
     public func createFromQuickInput(
         _ rawInput: String,
@@ -103,12 +97,7 @@ public final class TimerEngine {
         case .duration(let seconds):
             return createReminder(title: parsed.title, durationSeconds: seconds, accent: accent)
         case .clockTime(let targetDate, let secondsFromNow):
-            return createReminder(
-                title: parsed.title,
-                durationSeconds: secondsFromNow,
-                targetDate: targetDate,
-                accent: accent
-            )
+            return createReminder(title: parsed.title, durationSeconds: secondsFromNow, targetDate: targetDate, accent: accent)
         }
     }
 
@@ -143,11 +132,8 @@ public final class TimerEngine {
                 self?.setExternalReminderID(extID, for: itemID)
             }
         }
-
         return item
     }
-
-    // MARK: - Editing & Lifecycle
 
     public func updateReminder(id: UUID, title: String? = nil, durationSeconds: Int? = nil) {
         guard let idx = reminders.firstIndex(where: { $0.id == id }) else { return }
@@ -259,8 +245,6 @@ public final class TimerEngine {
         }
     }
 
-    // MARK: - Trigger Evaluation & Alert Resolution
-
     @discardableResult
     public func evaluateDueReminders() -> [ReminderItem] {
         let now = clock.now
@@ -367,8 +351,6 @@ public final class TimerEngine {
         }
     }
 
-    // MARK: - History & Stats
-
     @discardableResult
     public func rerunHistoryEntry(_ entry: HistoryEntry) -> ReminderItem {
         createReminder(
@@ -403,8 +385,6 @@ public final class TimerEngine {
             onTimeCount: onTime
         )
     }
-
-    // MARK: - Settings & Persistence
 
     public func updateSettings(_ mutate: (inout AppSettings) -> Void) {
         mutate(&settings)

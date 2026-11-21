@@ -22,7 +22,7 @@ final class SoundHapticsService {
             player.scheduleBuffer(buffer, at: nil, options: .interrupts)
             player.play()
         } catch {
-            // Audio output unavailable (e.g., headless Mac or disconnected audio device)
+            // no audio device / muted headless mac
         }
     }
 
@@ -127,7 +127,6 @@ final class SoundHapticsService {
             }
         }
 
-        // Soft limiter to guarantee zero clipping
         for i in 0..<Int(frameCount) {
             channelData[i] = tanh(channelData[i])
         }

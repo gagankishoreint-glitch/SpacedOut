@@ -10,7 +10,6 @@ enum SpacedTheme {
         case .dark: return .dark
         }
     }
-
     static func nsAppearance(for mode: ThemeMode) -> NSAppearance? {
         switch mode {
         case .system: return nil
@@ -24,47 +23,27 @@ enum SpacedTheme {
             ? Color(red: 0.05, green: 0.12, blue: 0.09).opacity(0.45)
             : Color(red: 0.86, green: 0.98, blue: 0.91).opacity(0.44)
     }
-
     static func cardSurface(for scheme: ColorScheme) -> Color {
-        scheme == .dark
-            ? Color.white.opacity(0.075)
-            : Color.white.opacity(0.62)
+        scheme == .dark ? Color.white.opacity(0.075) : Color.white.opacity(0.62)
     }
-
     static func chipSurface(for scheme: ColorScheme) -> Color {
-        scheme == .dark
-            ? Color.white.opacity(0.09)
-            : Color.white.opacity(0.76)
+        scheme == .dark ? Color.white.opacity(0.09) : Color.white.opacity(0.76)
     }
-
     static func hairlineBorder(for scheme: ColorScheme) -> Color {
-        scheme == .dark
-            ? Color.white.opacity(0.14)
-            : Color.white.opacity(0.68)
+        scheme == .dark ? Color.white.opacity(0.14) : Color.white.opacity(0.68)
     }
-
     static func subtleSeparator(for scheme: ColorScheme) -> Color {
-        scheme == .dark
-            ? Color.white.opacity(0.10)
-            : Color(red: 0.07, green: 0.20, blue: 0.14).opacity(0.10)
+        scheme == .dark ? Color.white.opacity(0.10) : Color(red: 0.07, green: 0.20, blue: 0.14).opacity(0.10)
     }
 
     static func inkPrimary(for scheme: ColorScheme) -> Color {
-        scheme == .dark
-            ? Color(red: 0.93, green: 0.98, blue: 0.95)
-            : Color(red: 0.06, green: 0.16, blue: 0.11)
+        scheme == .dark ? Color(red: 0.93, green: 0.98, blue: 0.95) : Color(red: 0.06, green: 0.16, blue: 0.11)
     }
-
     static func inkSecondary(for scheme: ColorScheme) -> Color {
-        scheme == .dark
-            ? Color(red: 0.70, green: 0.82, blue: 0.76)
-            : Color(red: 0.21, green: 0.36, blue: 0.29)
+        scheme == .dark ? Color(red: 0.70, green: 0.82, blue: 0.76) : Color(red: 0.21, green: 0.36, blue: 0.29)
     }
-
     static func inkMuted(for scheme: ColorScheme) -> Color {
-        scheme == .dark
-            ? Color(red: 0.50, green: 0.63, blue: 0.57)
-            : Color(red: 0.36, green: 0.49, blue: 0.43)
+        scheme == .dark ? Color(red: 0.50, green: 0.63, blue: 0.57) : Color(red: 0.36, green: 0.49, blue: 0.43)
     }
 
     static func accent(_ preset: AccentPreset, scheme: ColorScheme) -> Color {

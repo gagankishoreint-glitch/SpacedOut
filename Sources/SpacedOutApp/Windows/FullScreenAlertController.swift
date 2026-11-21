@@ -132,22 +132,22 @@ final class FullScreenAlertController {
             }
 
             switch event.keyCode {
-            case 36, 76, 49: // Return, Enter, Space -> Complete
+            case 36, 76, 49: // return / enter / space
                 self.coordinator.resolveAlert(id: current.id, action: .complete)
                 return nil
-            case 53: // Escape -> Dismiss
+            case 53: // esc
                 self.coordinator.resolveAlert(id: current.id, action: .dismiss)
                 return nil
-            case 18: // "1" -> +1m
+            case 18:
                 self.coordinator.resolveAlert(id: current.id, action: .snooze(seconds: 60))
                 return nil
-            case 19: // "2" -> +5m
+            case 19:
                 self.coordinator.resolveAlert(id: current.id, action: .snooze(seconds: 300))
                 return nil
-            case 20: // "3" -> +10m
+            case 20:
                 self.coordinator.resolveAlert(id: current.id, action: .snooze(seconds: 600))
                 return nil
-            case 21: // "4" -> +15m
+            case 21:
                 self.coordinator.resolveAlert(id: current.id, action: .snooze(seconds: 900))
                 return nil
             default:

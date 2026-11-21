@@ -24,8 +24,7 @@ struct VisualEffectView: NSViewRepresentable {
     }
 }
 
-/// Transparent AppKit drag surface so window dragging only occurs on non-interactive
-/// background/header regions without stealing SwiftUI Dial DragGestures.
+// handled via performDrag so dragging the dial doesn't drag the whole window
 struct WindowDragSurface: NSViewRepresentable {
     func makeNSView(context: Context) -> DragHandleNSView {
         DragHandleNSView()

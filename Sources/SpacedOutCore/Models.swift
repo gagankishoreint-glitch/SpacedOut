@@ -329,7 +329,7 @@ public struct HotkeyBinding: Codable, Equatable, Hashable, Sendable {
         self.keyLabel = keyLabel
     }
 
-    /// Default: Option + Space (Carbon kVK_Space = 49)
+    // option+space (Carbon kVK_Space = 49)
     public static let defaultToggleWidget = HotkeyBinding(
         keyCode: 49,
         modifiers: [.option],

@@ -18,14 +18,12 @@ final class UtilityWindowManager {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }
-
     func showSettings() {
         let window = ensureSettingsWindow()
         window.appearance = SpacedTheme.nsAppearance(for: coordinator.engine.settings.themeMode)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }
-
     func applyTheme(_ theme: ThemeMode) {
         let appearance = SpacedTheme.nsAppearance(for: theme)
         historyWindow?.appearance = appearance

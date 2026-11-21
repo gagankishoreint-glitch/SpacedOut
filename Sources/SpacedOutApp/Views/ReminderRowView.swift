@@ -31,7 +31,6 @@ struct ReminderRowView: View {
 
             VStack(spacing: 8) {
                 HStack(spacing: 11) {
-                    // Progress ring button (click toggles pause/resume)
                     Button(action: onTogglePause) {
                         ZStack {
                             Circle()
@@ -52,7 +51,6 @@ struct ReminderRowView: View {
                     .contentShape(Circle())
                     .help(isPaused ? "Resume timer" : "Pause timer")
 
-                    // Title + target wall-clock subtitle
                     VStack(alignment: .leading, spacing: 2) {
                         if isEditingTitle {
                             TextField("Reminder title", text: $draftTitle)
@@ -116,7 +114,6 @@ struct ReminderRowView: View {
 
                     Spacer(minLength: 6)
 
-                    // Crisp tabular countdown
                     Text(item.formattedRemaining(at: now))
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .monospacedDigit()
@@ -127,7 +124,6 @@ struct ReminderRowView: View {
                         )
                 }
 
-                // Hover quick edit controls (DeskMinder fix: edit/extend/complete without deleting!)
                 if isHovered {
                     HStack(spacing: 5) {
                         QuickAdjustPill(label: "-1m") { onAdjust(-60) }

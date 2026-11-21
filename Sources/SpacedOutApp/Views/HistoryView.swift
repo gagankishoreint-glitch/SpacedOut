@@ -67,7 +67,6 @@ struct HistoryView: View {
         let accent = SpacedTheme.accent(.mint, scheme: scheme)
 
         VStack(spacing: 16) {
-            // Daily summary tiles
             HStack(spacing: 10) {
                 StatTile(
                     title: "Completed Today",
@@ -92,7 +91,6 @@ struct HistoryView: View {
                 )
             }
 
-            // Search + Filter + Export toolbar
             HStack(spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass")

@@ -290,28 +290,10 @@ final class StatusBarController: NSObject {
     @objc private func handleQuickPresetMenu(_ sender: NSMenuItem) {
         coordinator.createPresetReminder(minutes: sender.tag, title: "")
     }
-
-    @objc private func handleToggleWidget() {
-        coordinator.toggleFloatingWidget(focusInput: true)
-    }
-
-    @objc private func handleOpenPopover() {
-        openPopover()
-    }
-
-    @objc private func handleToggleSafeMode() {
-        coordinator.togglePresentationSafeMode()
-    }
-
-    @objc private func handleOpenHistory() {
-        coordinator.openHistoryWindow()
-    }
-
-    @objc private func handleOpenSettings() {
-        coordinator.openSettingsWindow()
-    }
-
-    @objc private func handleQuit() {
-        NSApp.terminate(nil)
-    }
+    @objc private func handleToggleWidget() { coordinator.toggleFloatingWidget(focusInput: true) }
+    @objc private func handleOpenPopover() { openPopover() }
+    @objc private func handleToggleSafeMode() { coordinator.togglePresentationSafeMode() }
+    @objc private func handleOpenHistory() { coordinator.openHistoryWindow() }
+    @objc private func handleOpenSettings() { coordinator.openSettingsWindow() }
+    @objc private func handleQuit() { NSApp.terminate(nil) }
 }

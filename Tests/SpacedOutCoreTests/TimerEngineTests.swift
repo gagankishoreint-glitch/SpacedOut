@@ -50,12 +50,10 @@ final class TimerEngineTests: XCTestCase {
         let item = engine.createReminder(title: "Turn off kettle", durationSeconds: 300)
         XCTAssertEqual(item.remainingSeconds(at: clock.now), 300, accuracy: 0.01)
 
-        // Simulate laptop sleeping for 295 seconds
         clock.advance(by: 295)
         XCTAssertEqual(engine.evaluateDueReminders().count, 0)
         XCTAssertEqual(engine.activeOrPausedReminders.first?.remainingSeconds(at: clock.now) ?? -1, 5, accuracy: 0.01)
 
-        // Advance past expiration
         clock.advance(by: 6)
         let triggered = engine.evaluateDueReminders()
         XCTAssertEqual(triggered.count, 1)
@@ -74,7 +72,7 @@ final class TimerEngineTests: XCTestCase {
         XCTAssertEqual(engine.activeOrPausedReminders.first?.status, .paused)
         XCTAssertEqual(engine.activeOrPausedReminders.first?.remainingSeconds(at: clock.now) ?? 0, 480, accuracy: 0.01)
 
-        // Sleep while paused — remaining seconds must NOT tick down
+        // shouldn't tick while paused
         clock.advance(by: 1800)
         XCTAssertEqual(engine.evaluateDueReminders().count, 0)
         XCTAssertEqual(engine.activeOrPausedReminders.first?.remainingSeconds(at: clock.now) ?? 0, 480, accuracy: 0.01)
@@ -113,15 +111,15 @@ final class TimerEngineTests: XCTestCase {
 
         let item = engine.createReminder(title: "Join standup", durationSeconds: 120)
 
-        clock.advance(by: 95) // 25s remaining -> enters 30s window
+        clock.advance(by: 95)
         engine.evaluateDueReminders()
         XCTAssertEqual(preAlerts, [item.id])
 
-        clock.advance(by: 5) // 20s remaining -> must NOT repeat
+        clock.advance(by: 5) // still inside 30s window, shouldn't fire twice
         engine.evaluateDueReminders()
         XCTAssertEqual(preAlerts, [item.id])
 
-        clock.advance(by: 25) // expired
+        clock.advance(by: 25)
         let triggered = engine.evaluateDueReminders()
         XCTAssertEqual(triggered.map(\.id), [item.id])
     }

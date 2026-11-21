@@ -95,13 +95,8 @@ final class NotificationService {
         ])
     }
 
-    static func isCompleteAction(_ actionID: String) -> Bool {
-        actionID == completeActionID
-    }
-
-    static func isSnoozeAction(_ actionID: String) -> Bool {
-        actionID == snooze5ActionID
-    }
+    static func isCompleteAction(_ actionID: String) -> Bool { actionID == completeActionID }
+    static func isSnoozeAction(_ actionID: String) -> Bool { actionID == snooze5ActionID }
 
     private final class DelegateProxy: NSObject, UNUserNotificationCenterDelegate, Sendable {
         private let handler: @MainActor @Sendable (UUID, String) -> Void

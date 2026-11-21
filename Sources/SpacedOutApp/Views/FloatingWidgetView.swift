@@ -151,8 +151,6 @@ struct FloatingWidgetView: View {
         }
     }
 
-    // MARK: - Subviews
-
     @ViewBuilder
     private func headerBar(
         scheme: ColorScheme,
@@ -508,8 +506,6 @@ struct FloatingWidgetView: View {
         }
         .padding(.top, 2)
     }
-
-    // MARK: - Submission Helpers
 
     @MainActor
     private func submitQuickInput() {

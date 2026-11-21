@@ -19,7 +19,6 @@ struct TactileDialView: View {
         let progress = Double(minutes) / Double(maxDialMinutes)
 
         ZStack {
-            // Precision tick marks around perimeter
             Canvas { context, size in
                 let center = CGPoint(x: size.width / 2, y: size.height / 2)
                 let outerRadius = min(size.width, size.height) / 2 - 4
@@ -56,7 +55,6 @@ struct TactileDialView: View {
             .frame(width: dialDiameter + 22, height: dialDiameter + 22)
             .allowsHitTesting(false)
 
-            // Base frosted ring track
             Circle()
                 .stroke(
                     SpacedTheme.subtleSeparator(for: colorScheme),
@@ -64,7 +62,6 @@ struct TactileDialView: View {
                 )
                 .frame(width: dialDiameter, height: dialDiameter)
 
-            // Active sweep arc
             Circle()
                 .trim(from: 0, to: progress)
                 .stroke(
@@ -75,7 +72,6 @@ struct TactileDialView: View {
                 .frame(width: dialDiameter, height: dialDiameter)
                 .animation(.easeOut(duration: 0.08), value: minutes)
 
-            // Interactive knob thumb
             let thumbAngle = -Double.pi / 2 + progress * 2.0 * Double.pi
             let radius = dialDiameter / 2
             Circle()
@@ -92,7 +88,6 @@ struct TactileDialView: View {
                 )
                 .allowsHitTesting(false)
 
-            // Center Start button + readout
             Button(action: onStartTapped) {
                 VStack(spacing: 2) {
                     Text("\(minutes)m")
@@ -141,7 +136,7 @@ struct TactileDialView: View {
                     let center = CGPoint(x: (dialDiameter + 26) / 2, y: (dialDiameter + 26) / 2)
                     let dx = value.location.x - center.x
                     let dy = value.location.y - center.y
-                    // Ignore drags inside the 96pt center Start button
+                    // ignore taps inside the 96pt center start button
                     let distance = hypot(dx, dy)
                     guard distance > 48 else { return }
 
