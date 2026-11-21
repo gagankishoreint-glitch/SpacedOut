@@ -1,86 +1,110 @@
 # SpacedOut
 
-A native macOS 14+ desktop reminder and micro-task timer crafted for easily distracted minds. Built in Swift & SwiftUI (`SpacedOutCore` + `SpacedOutApp`) with a tactile frosted-glass UI, zero-drift wall-clock timers, calendar scheduling, unmissable multi-display full-screen alerts, restart-resilient watchdog recovery, and two-way Apple Reminders + Apple Calendar sync.
+A native macOS reminder and timer app for capturing tasks quickly and keeping them visible until they're done.
+
+<p align="center">
+  <img src="docs/images/app-icon.png" width="120" alt="SpacedOut icon">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-14.0%2B-blue" alt="macOS 14.0+">
+  <img src="https://img.shields.io/badge/Swift-5.10-orange" alt="Swift 5.10">
+  <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT License">
+</p>
+
+SpacedOut is designed around a simple idea: reminders should be easy to create and difficult to overlook.
+
+It combines quick natural-language input, countdown timers, scheduled reminders and a floating desktop widget. When a reminder is due, the app can display a full-screen alert rather than relying solely on a notification that might go unnoticed.
+
+Built with Swift, SwiftUI and AppKit.
+
+**[Download the latest release](https://github.com/gagankishoreint-glitch/SpacedOut/releases/latest)** · Requires macOS 14.0+
+
+---
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/images/widget.png" width="65%" alt="SpacedOut floating widget">
+</p>
+
+<p align="center">
+  <em>Floating widget with quick input, timer presets and task controls.</em>
+</p>
+
+<p align="center">
+  <img src="docs/images/settings.png" width="85%" alt="SpacedOut settings window">
+</p>
+
+<p align="center">
+  <em>Settings and workflow customisation.</em>
+</p>
+
+<!-- Add demo.gif here when a real application recording is available. -->
 
 ## Features
 
-- **Always-Reachable Floating Widget & Menu Bar Mode**
-  - Switch seamlessly between **Widget & Menu Bar**, **Menu Bar Only**, and **Floating Widget Only**.
-  - Drag anywhere on the widget glass surface to reposition; screen-parameter aware so disconnecting external monitors never strands the widget off-screen.
-  - Zero-permission system-wide global shortcut (`⌥ Space` by default, customizable in Settings) via Carbon `RegisterEventHotKey`.
-- **Instant Capture, Calendar Picker & Natural Quick Input**
-  - **One-click presets** (`5m`, `10m`, `15m`, `25m` — customizable in Settings).
-  - **Tactile Rotary Dial** (`1–99m`) with radial tick detents and trackpad haptic feedback.
-  - **Calendar Scheduling Popover**: Click the calendar button beside the quick-input box to pick any future date and time (with `+1h`, `Tonight 8pm`, `Tomorrow 9am` shortcuts).
-  - **Smart Quick Input**:
-    - `"tea 4m"` or `"15min stretch"` -> countdown timer
-    - `"1h30m deep work"` -> compound duration
-    - `"call Sam at 4:30pm"` or `"16:45 standup"` -> wall-clock scheduled reminder
-    - `"dentist tomorrow 9am"`, `"demo nov 25 at 2:30pm"`, `"mon 8:15am sync"`, `"12/01 14:00 pay rent"` -> multi-day calendar reminder
-    - `"25"` -> quick 25-minute timer
-- **Full Inline & Popover Editing on Active Timers**
-  - Click a title to rename inline, or hover a row to adjust (`-1m`, `+1m`, `+5m`), pause/resume, complete, delete, or click **Edit** to edit title, duration, calendar date/time, and accent color mid-countdown.
-- **Full-Screen Multi-Display Notifications + Presentation Safe Mode**
-  - Frosted full-screen takeover across all connected displays when time expires, with synthesized procedural audio chimes (`AVAudioEngine`) and Force Touch haptics.
-  - Optional **30-second Pre-Alert** inside the widget before taking over the screen.
-  - Instant keyboard triage on full-screen alerts: `Space` / `Return` (Complete), `1`–`4` (Snooze `+1m` / `+5m` / `+10m` / `+15m`), `Esc` (Dismiss).
-  - **Presentation / Call Safe Mode** toggle in the widget header and menu bar downgrades full-screen overlays to native macOS banners during screen sharing.
-- **Accountability Watchdog & Apple Screen Time Shortcuts**
-  - When timers are running inside the `.app` bundle, a lightweight user `LaunchAgent` (`com.spacedout.app.watchdog`) keeps SpacedOut alive across crashes, force-quits, and Mac restarts.
-  - Timers that expire while your Mac is off immediately catch up into the overdue alert queue on startup instead of letting you off the hook, while leaving Delete/Edit controls available inside SpacedOut.
-  - Quick links in **Settings → Sync & System** jump straight to macOS **Screen Time** (`Always Allowed`, `Downtime`, and `App Limits`) so focus sessions pair natively with Apple's system controls.
-- **Task History, User Activity Log & `.ics` Export**
-  - **Task History** tab with searchable day-grouped completions, focus stats, one-click **Run Again**, and RFC 5545 `.ics` export.
-  - **Activity Log** tab recording every creation, edit, time adjustment, pause/resume, snooze, restart recovery, Apple sync change, watchdog event, and removal with search, category filters, and `.txt` export.
-- **Two-Way Apple Reminders & Apple Calendar Sync (Enabled by Default)**
-  - Uses EventKit (`EKEventStore`) full access for both Reminders (`EKReminder`) and Calendar events (`EKEvent`).
-  - Edits, completions, and deletions made in Apple Reminders or Apple Calendar reconcile back into SpacedOut and appear in the Activity Log.
+### Reminders and timers
+- Create reminders using natural-language input.
+- Support for countdown durations such as `tea 4m` and `1h30m deep work`.
+- Schedule reminders for specific times, including `tomorrow 9am`.
+- Quick duration presets and an adjustable rotary timer dial.
+- Edit, complete, snooze and delete tasks.
 
-## Architecture
+### Desktop interface
+- Floating widget and menu bar operating modes.
+- Global keyboard shortcut (`⌥ Space` by default).
+- Widget positioning that adapts to connected displays.
+- Configurable appearance and notification behaviour.
 
-```text
-Sources/
-├── SpacedOutCore/          # Pure Foundation domain engine (zero AppKit/SwiftUI coupling)
-│   ├── Models.swift        # ReminderItem, HistoryEntry, AppSettings (forward-safe Codable)
-│   ├── QuickInputParser.swift
-│   ├── Persistence.swift   # Crash-safe atomic JSON store with corrupt backup preservation
-│   ├── ICSExporter.swift   # RFC 5545 calendar export
-│   └── TimerEngine.swift   # @Observable wall-clock engine (sleep/wake drift-proof)
-└── SpacedOutApp/           # Native macOS 14+ AppKit + SwiftUI layer
-    ├── Design/             # Tactile Frosted Glass tokens & NSVisualEffectView wrapper
-    ├── Services/           # EventKit (Reminders + Calendar), LaunchAgent Watchdog, Carbon Hotkeys, Audio, Notifications
-    ├── Windows/            # Non-activating NSPanel, Multi-screen Alert Overlay, NSStatusItem, Utility Windows
-    └── Views/              # FloatingWidget, TactileDial, ReminderRow, FullScreenAlert, History+Log, Settings
-```
+### Alerts
+- Full-screen alerts across connected displays.
+- Synthesised audio and supported trackpad haptics.
+- Keyboard controls for completing, snoozing and dismissing reminders.
+- Presentation mode for using native macOS notifications instead.
+- Optional pre-alert before a reminder expires.
 
-## Building & Running on macOS
+### Apple integration
+- Integration with Apple Reminders and Apple Calendar through EventKit.
+- Synchronisation of supported changes through Apple's services.
+- Calendar export using `.ics`.
 
-Requires **macOS 14.0+** and **Xcode 15.3+** (or Xcode 16+ / Swift 5.10+).
+Cross-device availability depends on the corresponding Apple account and iCloud synchronisation settings.
 
-### 1. Run unit tests
+### History and recovery
+- Searchable activity history.
+- Focus and completion statistics.
+- Atomic local persistence.
+- Recovery of timers that expire while the Mac is asleep or powered off.
+- LaunchAgent-based application recovery.
+- Export activity history as `.txt`.
+
+## Installation
+
+1. Visit the [latest releases](https://github.com/gagankishoreint-glitch/SpacedOut/releases/latest).
+2. Download `SpacedOut.dmg`.
+3. Open the disk image and move `SpacedOut.app` into Applications.
+4. Open the application.
+
+**First launch:** Releases are currently ad-hoc signed and not notarised by Apple. macOS may prevent the application from opening initially. If this happens, use Finder to right-click the app, select **Open**, and confirm the warning.
+
+If necessary, the quarantine attribute can be removed manually:
+
 ```bash
-swift test
+xattr -d com.apple.quarantine /Applications/SpacedOut.app
 ```
 
-### 2. Build a signed `.app` bundle and launch
+The application requests Reminders and Calendar permissions when those integrations are used.
+
+## Building from source
+
+### Requirements
+
+- macOS 14.0 or later
+- Xcode 15.3 or later
+- Swift 5.10 or later
+
+Clone the repository:
+
 ```bash
-make run
-```
-This runs `swift test`, compiles a release build, compiles `AppIcon.icon` into `Assets.car` and `AppIcon.icns` (with `Assets.xcassets` / `AppIcon.icns` fallbacks), assembles `dist/SpacedOut.app` with `Info.plist` and entitlements, ad-hoc signs it, and opens it.
-
-### 3. Build a distributable `.dmg` disk image
-```bash
-make dmg
-```
-This builds and signs `dist/SpacedOut.app` and packages it with an `Applications` symlink into `dist/SpacedOut.dmg`.
-
-### 4. Open in Xcode
-- **Direct SwiftPM open:** `open Package.swift`
-- **Or generate a full `.xcodeproj` with XcodeGen** (`brew install xcodegen`):
-  ```bash
-  make xcode
-  ```
-
-## Data Storage
-
-Local state (timers, history, activity log, and settings) is saved atomically to `~/Library/Application Support/SpacedOut/state.json`.
+git clone
