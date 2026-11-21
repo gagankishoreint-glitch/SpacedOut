@@ -31,85 +31,87 @@ struct FloatingWidgetView: View {
         let accent = SpacedTheme.accent(.mint, scheme: scheme)
         let activeList = coordinator.engine.activeOrPausedReminders
 
-        ZStack {
-            VisualEffectView(
-                material: .hudWindow,
-                blendingMode: .behindWindow,
-                state: .active
+        VStack(alignment: .leading, spacing: 11) {
+            headerBar(
+                scheme: scheme,
+                inkPrimary: inkPrimary,
+                inkMuted: inkMuted,
+                accent: accent,
+                activeCount: activeList.count
             )
 
-            SpacedTheme.widgetTintWash(for: scheme)
-
-            if !isMenuBarPopover {
-                WindowDragSurface()
+            if let preAlert = coordinator.engine.currentPreAlertReminder,
+               !coordinator.engine.settings.presentationSafeMode {
+                preAlertBanner(preAlert, scheme: scheme)
             }
 
-            VStack(alignment: .leading, spacing: 11) {
-                headerBar(
-                    scheme: scheme,
-                    inkPrimary: inkPrimary,
-                    inkMuted: inkMuted,
-                    accent: accent,
-                    activeCount: activeList.count
-                )
+            quickInputSection(
+                scheme: scheme,
+                inkPrimary: inkPrimary,
+                inkSecondary: inkSecondary,
+                inkMuted: inkMuted,
+                accent: accent
+            )
 
-                if let preAlert = coordinator.engine.currentPreAlertReminder,
-                   !coordinator.engine.settings.presentationSafeMode {
-                    preAlertBanner(preAlert, scheme: scheme)
-                }
+            presetsRow(
+                scheme: scheme,
+                inkPrimary: inkPrimary,
+                inkSecondary: inkSecondary,
+                accent: accent
+            )
 
-                quickInputSection(
-                    scheme: scheme,
-                    inkPrimary: inkPrimary,
-                    inkSecondary: inkSecondary,
-                    inkMuted: inkMuted,
-                    accent: accent
-                )
-
-                presetsRow(
-                    scheme: scheme,
-                    inkPrimary: inkPrimary,
-                    inkSecondary: inkSecondary,
-                    accent: accent
-                )
-
-                if coordinator.isDialExpanded {
-                    HStack {
-                        Spacer()
-                        TactileDialView(
-                            minutes: Binding(
-                                get: { coordinator.selectedDialMinutes },
-                                set: { coordinator.selectedDialMinutes = $0 }
-                            ),
-                            onMinuteTick: {
-                                coordinator.soundHaptics.performHaptic(
-                                    .alignment,
-                                    enabled: coordinator.engine.settings.hapticsEnabled
-                                )
-                            },
-                            onStartTapped: {
-                                submitFromDial()
-                            }
-                        )
-                        Spacer()
-                    }
-                    .padding(.vertical, 2)
-                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96)))
-                }
-
-                if activeList.isEmpty {
-                    idleFooter(
-                        scheme: scheme,
-                        inkMuted: inkMuted,
-                        accent: accent
+            if coordinator.isDialExpanded {
+                HStack {
+                    Spacer()
+                    TactileDialView(
+                        minutes: Binding(
+                            get: { coordinator.selectedDialMinutes },
+                            set: { coordinator.selectedDialMinutes = $0 }
+                        ),
+                        onMinuteTick: {
+                            coordinator.soundHaptics.performHaptic(
+                                .alignment,
+                                enabled: coordinator.engine.settings.hapticsEnabled
+                            )
+                        },
+                        onStartTapped: {
+                            submitFromDial()
+                        }
                     )
-                } else {
-                    timersListSection(activeList)
+                    Spacer()
+                }
+                .padding(.vertical, 2)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96)))
+            }
+
+            if activeList.isEmpty {
+                idleFooter(
+                    scheme: scheme,
+                    inkMuted: inkMuted,
+                    accent: accent
+                )
+            } else {
+                timersListSection(activeList)
+            }
+        }
+        .padding(14)
+        .frame(width: widgetWidth)
+        .fixedSize(horizontal: false, vertical: true)
+        .background {
+            ZStack {
+                VisualEffectView(
+                    material: .hudWindow,
+                    blendingMode: .behindWindow,
+                    state: .active
+                )
+
+                SpacedTheme.widgetTintWash(for: scheme)
+
+                if !isMenuBarPopover {
+                    WindowDragSurface()
                 }
             }
-            .padding(14)
         }
-        .frame(width: widgetWidth)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
