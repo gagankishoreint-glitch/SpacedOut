@@ -92,7 +92,9 @@ struct ReminderRowView: View {
                                 onPreparePopover()
                                 draftTitle = item.title
                                 isEditingTitle = true
-                                titleFieldFocused = true
+                                Task { @MainActor in
+                                    titleFieldFocused = true
+                                }
                             }
                             .help("Click to rename, or use Edit below for date & time")
                         }
@@ -138,9 +140,9 @@ struct ReminderRowView: View {
 
                 if isHovered || showEditPopover {
                     HStack(spacing: 5) {
-                        QuickAdjustPill(label: "-1m") { onAdjust(-60) }
-                        QuickAdjustPill(label: "+1m") { onAdjust(60) }
-                        QuickAdjustPill(label: "+5m") { onAdjust(300) }
+                        QuickAdjustPill(label: "-1m", glassOpacity: glassOpacity) { onAdjust(-60) }
+                        QuickAdjustPill(label: "+1m", glassOpacity: glassOpacity) { onAdjust(60) }
+                        QuickAdjustPill(label: "+5m", glassOpacity: glassOpacity) { onAdjust(300) }
 
                         Spacer()
 
@@ -326,7 +328,7 @@ private struct ReminderEditPopover: View {
                     DatePicker(
                         "Date",
                         selection: $scheduledDate,
-                        in: Date()...,
+                        in: Calendar.current.startOfDay(for: Date())...,
                         displayedComponents: [.date]
                     )
                     .datePickerStyle(.graphical)
@@ -383,6 +385,7 @@ private struct ReminderEditPopover: View {
         }
         .padding(14)
         .frame(width: 292)
+        .preferredColorScheme(scheme)
     }
 
     private func saveChanges() {
@@ -398,6 +401,7 @@ private struct ReminderEditPopover: View {
 
 private struct QuickAdjustPill: View {
     let label: String
+    var glassOpacity: Double = 0.78
     let action: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
@@ -415,13 +419,13 @@ private struct QuickAdjustPill: View {
                     Capsule()
                         .fill(
                             isHovered
-                                ? SpacedTheme.cardSurface(for: colorScheme)
-                                : SpacedTheme.chipSurface(for: colorScheme)
+                                ? SpacedTheme.cardSurface(for: colorScheme, glassOpacity: glassOpacity)
+                                : SpacedTheme.chipSurface(for: colorScheme, glassOpacity: glassOpacity)
                         )
                 )
                 .overlay(
                     Capsule()
-                        .stroke(SpacedTheme.hairlineBorder(for: colorScheme), lineWidth: 0.7)
+                        .stroke(SpacedTheme.hairlineBorder(for: colorScheme, glassOpacity: glassOpacity), lineWidth: 0.7)
                 )
         }
         .buttonStyle(.plain)

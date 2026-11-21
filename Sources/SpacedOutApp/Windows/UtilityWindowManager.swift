@@ -41,7 +41,7 @@ final class UtilityWindowManager {
             backing: .buffered,
             defer: false
         )
-        window.title = "Task History"
+        window.title = "History & Activity"
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 560, height: 440)

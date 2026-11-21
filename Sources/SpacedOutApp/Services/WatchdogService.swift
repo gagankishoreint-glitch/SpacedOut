@@ -11,6 +11,11 @@ final class WatchdogService {
         case armed(String)
     }
 
+    private nonisolated static let agentQueue = DispatchQueue(
+        label: "com.spacedout.app.watchdog.serial",
+        qos: .utility
+    )
+
     private var lastAppliedMode: AppliedMode?
 
     var isSupportedInCurrentBundle: Bool {
@@ -40,7 +45,21 @@ final class WatchdogService {
         lastAppliedMode = desired
 
         let plistURL = Self.plistURL
-        Task.detached(priority: .utility) {
+        Self.agentQueue.async {
+            if armed {
+                Self.installOrUpdateAgent(plistURL: plistURL, executablePath: execPath)
+            } else {
+                Self.uninstallAgent(plistURL: plistURL)
+            }
+        }
+    }
+
+    func syncStateAndWait(armed: Bool) {
+        guard isSupportedInCurrentBundle, let execPath = Bundle.main.executablePath else { return }
+        lastAppliedMode = armed ? .armed(execPath) : .disarmed
+
+        let plistURL = Self.plistURL
+        Self.agentQueue.sync {
             if armed {
                 Self.installOrUpdateAgent(plistURL: plistURL, executablePath: execPath)
             } else {

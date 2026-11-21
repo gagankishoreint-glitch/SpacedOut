@@ -204,6 +204,7 @@ struct FloatingWidgetView: View {
                     : inkMuted,
                 isActive: coordinator.engine.settings.presentationSafeMode,
                 scheme: scheme,
+                glassOpacity: glassOpacity,
                 helpText: coordinator.engine.settings.presentationSafeMode
                     ? "Safe Mode On: Full-screen alerts downgraded to banners"
                     : "Safe Mode Off: Click to suppress full-screen takeovers during calls"
@@ -216,6 +217,7 @@ struct FloatingWidgetView: View {
                 tint: coordinator.isDialExpanded ? accent : inkMuted,
                 isActive: coordinator.isDialExpanded,
                 scheme: scheme,
+                glassOpacity: glassOpacity,
                 helpText: coordinator.isDialExpanded ? "Hide rotary dial" : "Show rotary dial (1–99m)"
             ) {
                 withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.85)) {
@@ -228,6 +230,7 @@ struct FloatingWidgetView: View {
                 tint: inkMuted,
                 isActive: false,
                 scheme: scheme,
+                glassOpacity: glassOpacity,
                 helpText: "Task History & Activity Log"
             ) {
                 coordinator.openHistoryWindow()
@@ -238,6 +241,7 @@ struct FloatingWidgetView: View {
                 tint: inkMuted,
                 isActive: false,
                 scheme: scheme,
+                glassOpacity: glassOpacity,
                 helpText: "Settings"
             ) {
                 coordinator.openSettingsWindow()
@@ -249,6 +253,7 @@ struct FloatingWidgetView: View {
                     tint: inkMuted,
                     isActive: false,
                     scheme: scheme,
+                    glassOpacity: glassOpacity,
                     helpText: "Hide widget (\(coordinator.engine.settings.globalShortcut.displayString))"
                 ) {
                     coordinator.hideFloatingWidget()
@@ -655,7 +660,7 @@ private struct CalendarSchedulePopover: View {
             DatePicker(
                 "Date",
                 selection: $targetDate,
-                in: Date()...,
+                in: Calendar.current.startOfDay(for: Date())...,
                 displayedComponents: [.date]
             )
             .datePickerStyle(.graphical)
@@ -693,6 +698,7 @@ private struct CalendarSchedulePopover: View {
         }
         .padding(14)
         .frame(width: 292)
+        .preferredColorScheme(scheme)
     }
 
     private func scheduleNow() {
@@ -729,6 +735,7 @@ private struct HeaderIconButton: View {
     let tint: Color
     let isActive: Bool
     let scheme: ColorScheme
+    var glassOpacity: Double = 0.78
     let helpText: String
     let action: () -> Void
 
@@ -744,7 +751,7 @@ private struct HeaderIconButton: View {
                     Circle().fill(
                         isActive
                             ? tint.opacity(0.15)
-                            : (isHovered ? SpacedTheme.chipSurface(for: scheme) : Color.clear)
+                            : (isHovered ? SpacedTheme.chipSurface(for: scheme, glassOpacity: glassOpacity) : Color.clear)
                     )
                 )
         }

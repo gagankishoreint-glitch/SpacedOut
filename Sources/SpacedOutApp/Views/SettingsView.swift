@@ -462,7 +462,7 @@ private struct RemindersDataSettingsTab: View {
                     }
                 }
 
-                Text("Pair SpacedOut focus timers with Apple Screen Time’s Always Allowed, Downtime, and App Limits in System Settings.")
+                Text("Pair focus timers with Screen Time in System Settings (Downtime & App Limits panes require App & Website Activity enabled).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

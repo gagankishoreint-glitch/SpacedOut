@@ -38,10 +38,13 @@ enum SpacedTheme {
 
     static func widgetSolidCover(for scheme: ColorScheme, opacity: Double) -> Color {
         let clamped = min(1.0, max(0.15, opacity))
-        guard clamped > 0.55 else { return .clear }
-        let t = (clamped - 0.55) / 0.45
-        let coverAlpha = pow(t, 1.15) * 0.90
-        return Color(nsColor: .windowBackgroundColor).opacity(coverAlpha)
+        guard clamped > 0.78 else { return .clear }
+        let t = (clamped - 0.78) / 0.22
+        let coverAlpha = pow(t, 1.1) * 0.94
+        let base = scheme == .dark
+            ? Color(red: 0.08, green: 0.11, blue: 0.10)
+            : Color(red: 0.95, green: 0.97, blue: 0.96)
+        return base.opacity(coverAlpha)
     }
 
     static func cardSurface(for scheme: ColorScheme, glassOpacity: Double = 0.78) -> Color {

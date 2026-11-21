@@ -796,12 +796,15 @@ public final class TimerEngine {
             var loadedSettings = loaded.settings
             self.lastSeenAt = loaded.lastSeenAt
 
-            // upgrade v1 state so default Apple sync & watchdog turn on seamlessly
+            // upgrade v1 state so default Apple sync, watchdog, and glass opacity update cleanly
             var needsPersist = false
             if loaded.schemaVersion < 2 {
                 loadedSettings.appleRemindersSyncEnabled = true
                 loadedSettings.appleCalendarSyncEnabled = true
                 loadedSettings.accountabilityWatchdogEnabled = true
+                if abs(loadedSettings.widgetOpacity - 0.94) < 0.001 {
+                    loadedSettings.widgetOpacity = 0.78
+                }
                 needsPersist = true
             }
             self.settings = loadedSettings

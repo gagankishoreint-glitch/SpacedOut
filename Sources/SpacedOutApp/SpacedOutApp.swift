@@ -49,6 +49,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        coordinator?.handleApplicationShouldTerminate() ?? .terminateNow
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         coordinator?.shutdown()
     }

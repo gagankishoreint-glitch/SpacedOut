@@ -37,6 +37,7 @@ final class AppCoordinator {
     private var wakeObserver: NSObjectProtocol?
     private var tickCounter: Int = 0
     private var didStart = false
+    private var confirmedTermination = false
 
     init() {
         let engine = TimerEngine()
@@ -406,10 +407,18 @@ final class AppCoordinator {
     }
 
     func requestIntentionalQuit() {
+        NSApp.terminate(nil)
+    }
+
+    func handleApplicationShouldTerminate() -> NSApplication.TerminateReply {
+        if confirmedTermination {
+            return .terminateNow
+        }
+
         let unfinished = engine.activeOrPausedReminders.count + engine.triggeredQueue.count
         guard unfinished > 0 && engine.settings.accountabilityWatchdogEnabled else {
-            NSApp.terminate(nil)
-            return
+            confirmedTermination = true
+            return .terminateNow
         }
 
         let alert = NSAlert()
@@ -425,13 +434,15 @@ final class AppCoordinator {
         case .alertSecondButtonReturn:
             watchdog.recordIntentionalQuitForCurrentBoot()
             engine.recordWatchdogEvent("User quit with \(unfinished) active timer(s); armed to resume on reboot")
-            NSApp.terminate(nil)
+            confirmedTermination = true
+            return .terminateNow
         case .alertThirdButtonReturn:
             engine.removeAllActiveRemindersForQuit()
-            watchdog.syncState(armed: false)
-            NSApp.terminate(nil)
+            watchdog.syncStateAndWait(armed: false)
+            confirmedTermination = true
+            return .terminateNow
         default:
-            break
+            return .terminateCancel
         }
     }
 

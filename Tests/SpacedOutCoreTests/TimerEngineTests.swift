@@ -308,4 +308,72 @@ final class TimerEngineTests: XCTestCase {
         engine.updateSettings { $0.widgetOpacity = 1.4 }
         XCTAssertEqual(engine.settings.widgetOpacity, 1.0, accuracy: 0.001)
     }
+
+    func testExternalSyncIgnoresReminderSecondTruncationAndPausedDates() async throws {
+        let clock = MutableTestClock(Date(timeIntervalSince1970: 1_700_000_027))
+        let engine = TimerEngine(clock: clock, store: InMemoryStateStore())
+        let mockSync = MockSyncProvider()
+        engine.attachSyncProvider(mockSync)
+
+        let active = engine.createReminder(title: "Steep tea", durationSeconds: 240)
+        let paused = engine.createReminder(title: "Read paper", durationSeconds: 900)
+        try await Task.sleep(nanoseconds: 30_000_000)
+
+        engine.togglePause(id: paused.id)
+        try await Task.sleep(nanoseconds: 30_000_000)
+
+        // Apple Reminders strips seconds (:00 -> 27s difference); Apple Calendar keeps exact timestamp
+        let truncatedReminderDate = active.targetDate.addingTimeInterval(-27)
+        mockSync.snapshotsByID[active.id] = ExternalSyncSnapshot(
+            reminderExists: true,
+            reminderCompleted: false,
+            reminderTitle: "Steep tea",
+            reminderTargetDate: truncatedReminderDate,
+            calendarEventExists: true,
+            calendarTitle: "Steep tea",
+            calendarTargetDate: active.targetDate
+        )
+        // Paused item should sync title change without unpausing or altering remaining seconds
+        mockSync.snapshotsByID[paused.id] = ExternalSyncSnapshot(
+            reminderExists: true,
+            reminderCompleted: false,
+            reminderTitle: "Read draft",
+            reminderTargetDate: nil,
+            calendarEventExists: true,
+            calendarTitle: "Read draft",
+            calendarTargetDate: paused.targetDate.addingTimeInterval(600)
+        )
+
+        let originalTarget = active.targetDate
+        await engine.reconcileAllFromSyncProvider()
+
+        let activeAfter = engine.activeOrPausedReminders.first { $0.id == active.id }
+        XCTAssertEqual(activeAfter?.targetDate.timeIntervalSince1970 ?? 0, originalTarget.timeIntervalSince1970, accuracy: 0.1)
+
+        let pausedAfter = engine.activeOrPausedReminders.first { $0.id == paused.id }
+        XCTAssertEqual(pausedAfter?.status, .paused)
+        XCTAssertEqual(pausedAfter?.title, "Read draft")
+        XCTAssertEqual(pausedAfter?.pausedRemainingSeconds ?? 0, 900, accuracy: 0.5)
+    }
+
+    func testSchemaUpgradeMigratesV1DefaultOpacityWithoutClobberingCustom() {
+        let customSettings = AppSettings(widgetOpacity: 0.85)
+        let v1DefaultStore = InMemoryStateStore(
+            initialState: PersistedState(
+                schemaVersion: 1,
+                settings: AppSettings(widgetOpacity: 0.94)
+            )
+        )
+        let migrated = TimerEngine(clock: MutableTestClock(), store: v1DefaultStore)
+        XCTAssertEqual(migrated.settings.widgetOpacity, 0.78, accuracy: 0.001)
+
+        let v1CustomStore = InMemoryStateStore(
+            initialState: PersistedState(
+                schemaVersion: 1,
+                settings: customSettings
+            )
+        )
+        let preserved = TimerEngine(clock: MutableTestClock(), store: v1CustomStore)
+        XCTAssertEqual(preserved.settings.widgetOpacity, 0.85, accuracy: 0.001)
+    }
 }
