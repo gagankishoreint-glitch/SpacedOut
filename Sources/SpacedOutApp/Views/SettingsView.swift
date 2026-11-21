@@ -23,11 +23,11 @@ struct SettingsView: View {
 
             RemindersDataSettingsTab()
                 .tabItem {
-                    Label("Reminders & Data", systemImage: "checklist")
+                    Label("Sync & System", systemImage: "arrow.triangle.2.circlepath.circle")
                 }
         }
         .padding(18)
-        .frame(width: 590, height: 585)
+        .frame(width: 600, height: 610)
         .preferredColorScheme(SpacedTheme.colorScheme(for: coordinator.engine.settings.themeMode))
     }
 }
@@ -168,22 +168,34 @@ private struct AppearanceSettingsTab: View {
                 }
 
                 LabeledContent("Glass Opacity") {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
+                        Text("Sheer")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+
                         Slider(
                             value: Binding(
                                 get: { coordinator.engine.settings.widgetOpacity },
                                 set: { val in coordinator.engine.updateSettings { $0.widgetOpacity = val } }
                             ),
-                            in: 0.72...1.0
+                            in: 0.15...1.0
                         )
                         .labelsHidden()
-                        .frame(width: 170)
+                        .frame(width: 145)
+
+                        Text("Solid")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
 
                         Text("\(Int((coordinator.engine.settings.widgetOpacity * 100).rounded()))%")
                             .monospacedDigit()
-                            .frame(width: 40, alignment: .trailing)
+                            .frame(width: 38, alignment: .trailing)
                     }
                 }
+
+                Text("Adjusts glass translucency from sheer crystal to solid while keeping text sharp.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Window Behavior") {
@@ -299,7 +311,7 @@ private struct RemindersDataSettingsTab: View {
 
     var body: some View {
         Form {
-            Section("Apple Reminders Sync") {
+            Section("Apple Reminders & Calendar Sync") {
                 Toggle("Sync Timers with Apple Reminders", isOn: Binding(
                     get: { coordinator.engine.settings.appleRemindersSyncEnabled },
                     set: { enabled in
@@ -309,46 +321,43 @@ private struct RemindersDataSettingsTab: View {
                     }
                 ))
 
-                LabeledContent("Reminders Permission") {
-                    Text(coordinator.remindersSync.authState.label)
-                        .foregroundStyle(
-                            coordinator.remindersSync.authState == .authorized ? .green : .secondary
-                        )
-                }
-
-                if coordinator.remindersSync.authState == .notDetermined {
-                    LabeledContent("Authorization") {
-                        Button("Request Reminders Access") {
-                            Task { @MainActor in
-                                _ = await coordinator.remindersSync.requestAccess()
+                LabeledContent("Reminders Access") {
+                    HStack(spacing: 8) {
+                        Text(coordinator.remindersSync.authState.label)
+                            .foregroundStyle(
+                                coordinator.remindersSync.authState == .authorized ? .green : .secondary
+                            )
+                        if coordinator.remindersSync.authState == .notDetermined {
+                            Button("Allow…") {
+                                Task { @MainActor in
+                                    _ = await coordinator.remindersSync.requestAccess()
+                                }
                             }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        } else if coordinator.remindersSync.authState == .denied || coordinator.remindersSync.authState == .writeOnly {
+                            Button("Open Privacy…") {
+                                coordinator.remindersSync.openSystemRemindersPrivacy()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
-                        .buttonStyle(.bordered)
-                    }
-                } else if coordinator.remindersSync.authState == .denied || coordinator.remindersSync.authState == .writeOnly {
-                    LabeledContent("Authorization") {
-                        Button("Open Reminders Privacy…") {
-                            coordinator.remindersSync.openSystemRemindersPrivacy()
-                        }
-                        .buttonStyle(.bordered)
                     }
                 }
 
-                LabeledContent("Target List Name") {
+                LabeledContent("Reminders List") {
                     HStack(spacing: 8) {
                         TextField("", text: $listNameDraft, prompt: Text("SpacedOut"))
                             .labelsHidden()
                             .textFieldStyle(.roundedBorder)
-                            .frame(width: 155)
+                            .frame(width: 145)
                             .onSubmit { applyListName() }
-                        Button("Save") { applyListName() }
+                        Button("Apply") { applyListName() }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
                     }
                 }
-            }
 
-            Section("Apple Calendar Sync") {
                 Toggle("Sync Scheduled Timers with Apple Calendar", isOn: Binding(
                     get: { coordinator.engine.settings.appleCalendarSyncEnabled },
                     set: { enabled in
@@ -358,45 +367,44 @@ private struct RemindersDataSettingsTab: View {
                     }
                 ))
 
-                LabeledContent("Calendar Permission") {
-                    Text(coordinator.remindersSync.calendarAuthState.label)
-                        .foregroundStyle(
-                            coordinator.remindersSync.calendarAuthState == .authorized ? .green : .secondary
-                        )
-                }
-
-                if coordinator.remindersSync.calendarAuthState == .notDetermined {
-                    LabeledContent("Authorization") {
-                        Button("Request Calendar Access") {
-                            Task { @MainActor in
-                                _ = await coordinator.remindersSync.requestCalendarAccess()
+                LabeledContent("Calendar Access") {
+                    HStack(spacing: 8) {
+                        Text(coordinator.remindersSync.calendarAuthState.label)
+                            .foregroundStyle(
+                                coordinator.remindersSync.calendarAuthState == .authorized ? .green : .secondary
+                            )
+                        if coordinator.remindersSync.calendarAuthState == .notDetermined {
+                            Button("Allow…") {
+                                Task { @MainActor in
+                                    _ = await coordinator.remindersSync.requestCalendarAccess()
+                                }
                             }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        } else if coordinator.remindersSync.calendarAuthState == .denied || coordinator.remindersSync.calendarAuthState == .writeOnly {
+                            Button("Open Privacy…") {
+                                coordinator.remindersSync.openSystemCalendarPrivacy()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
-                        .buttonStyle(.bordered)
-                    }
-                } else if coordinator.remindersSync.calendarAuthState == .denied || coordinator.remindersSync.calendarAuthState == .writeOnly {
-                    LabeledContent("Authorization") {
-                        Button("Open Calendar Privacy…") {
-                            coordinator.remindersSync.openSystemCalendarPrivacy()
-                        }
-                        .buttonStyle(.bordered)
                     }
                 }
 
-                LabeledContent("Target Calendar Name") {
+                LabeledContent("Calendar Name") {
                     HStack(spacing: 8) {
                         TextField("", text: $calendarNameDraft, prompt: Text("SpacedOut"))
                             .labelsHidden()
                             .textFieldStyle(.roundedBorder)
-                            .frame(width: 155)
+                            .frame(width: 145)
                             .onSubmit { applyCalendarName() }
-                        Button("Save") { applyCalendarName() }
+                        Button("Apply") { applyCalendarName() }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
                     }
                 }
 
-                LabeledContent("Two-Way Reconciliation") {
+                LabeledContent("Two-Way Sync") {
                     Button("Sync Changes Now") {
                         Task { @MainActor in
                             await coordinator.reconcileAppleSyncNow()
@@ -412,7 +420,7 @@ private struct RemindersDataSettingsTab: View {
                 }
             }
 
-            Section("Accountability & Restart Recovery") {
+            Section("Accountability & Screen Time") {
                 Toggle("Keep Active Timers Alive Across Crashes & Restarts", isOn: Binding(
                     get: { coordinator.engine.settings.accountabilityWatchdogEnabled },
                     set: { enabled in
@@ -424,6 +432,39 @@ private struct RemindersDataSettingsTab: View {
                     Text(watchdogStatusLabel)
                         .foregroundStyle(coordinator.engine.shouldArmWatchdog ? .green : .secondary)
                 }
+
+                LabeledContent("Apple Screen Time") {
+                    Button("Open Screen Time…") {
+                        coordinator.openScreenTimeSettings()
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                LabeledContent("Screen Time Panes") {
+                    HStack(spacing: 6) {
+                        Button("Always Allowed…") {
+                            coordinator.openScreenTimeSettings(subpath: "always-allowed")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        Button("Downtime…") {
+                            coordinator.openScreenTimeSettings(subpath: "downtime")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+
+                        Button("App Limits…") {
+                            coordinator.openScreenTimeSettings(subpath: "app-limits")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+
+                Text("Pair SpacedOut focus timers with Apple Screen Time’s Always Allowed, Downtime, and App Limits in System Settings.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Export & Storage") {

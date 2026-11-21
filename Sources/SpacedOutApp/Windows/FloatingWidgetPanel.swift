@@ -93,7 +93,7 @@ final class FloatingWidgetController: NSObject, NSWindowDelegate {
 
     func applySettings(_ settings: AppSettings) {
         panel.level = settings.alwaysOnTop ? .floating : .normal
-        panel.alphaValue = CGFloat(settings.widgetOpacity)
+        panel.alphaValue = 1.0
         panel.appearance = SpacedTheme.nsAppearance(for: settings.themeMode)
         DispatchQueue.main.async { [weak self] in
             self?.clampInsideVisibleScreen()

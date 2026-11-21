@@ -736,7 +736,7 @@ public final class TimerEngine {
 
     public func updateSettings(_ mutate: (inout AppSettings) -> Void) {
         mutate(&settings)
-        settings.widgetOpacity = min(1.0, max(0.72, settings.widgetOpacity))
+        settings.widgetOpacity = min(1.0, max(0.15, settings.widgetOpacity))
         settings.preAlertSeconds = max(10, min(120, settings.preAlertSeconds))
         settings.defaultDurationMinutes = max(1, min(999, settings.defaultDurationMinutes))
         if settings.quickPresetsMinutes.isEmpty {

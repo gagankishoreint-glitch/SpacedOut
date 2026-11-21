@@ -23,14 +23,50 @@ enum SpacedTheme {
             ? Color(red: 0.05, green: 0.12, blue: 0.09).opacity(0.45)
             : Color(red: 0.86, green: 0.98, blue: 0.91).opacity(0.44)
     }
-    static func cardSurface(for scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color.white.opacity(0.075) : Color.white.opacity(0.62)
+
+    static func widgetGlassWash(for scheme: ColorScheme, opacity: Double) -> Color {
+        let clamped = min(1.0, max(0.15, opacity))
+        let normalized = (clamped - 0.15) / 0.85
+        if scheme == .dark {
+            let alpha = 0.14 + pow(normalized, 1.2) * 0.56
+            return Color(red: 0.05, green: 0.11, blue: 0.09).opacity(alpha)
+        } else {
+            let alpha = 0.10 + pow(normalized, 1.2) * 0.52
+            return Color(red: 0.90, green: 0.98, blue: 0.94).opacity(alpha)
+        }
     }
-    static func chipSurface(for scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color.white.opacity(0.09) : Color.white.opacity(0.76)
+
+    static func widgetSolidCover(for scheme: ColorScheme, opacity: Double) -> Color {
+        let clamped = min(1.0, max(0.15, opacity))
+        guard clamped > 0.55 else { return .clear }
+        let t = (clamped - 0.55) / 0.45
+        let coverAlpha = pow(t, 1.15) * 0.90
+        return Color(nsColor: .windowBackgroundColor).opacity(coverAlpha)
     }
-    static func hairlineBorder(for scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color.white.opacity(0.14) : Color.white.opacity(0.68)
+
+    static func cardSurface(for scheme: ColorScheme, glassOpacity: Double = 0.78) -> Color {
+        let t = (min(1.0, max(0.15, glassOpacity)) - 0.15) / 0.85
+        if scheme == .dark {
+            return Color.white.opacity(0.055 + t * 0.065)
+        } else {
+            return Color.white.opacity(0.18 + t * 0.56)
+        }
+    }
+    static func chipSurface(for scheme: ColorScheme, glassOpacity: Double = 0.78) -> Color {
+        let t = (min(1.0, max(0.15, glassOpacity)) - 0.15) / 0.85
+        if scheme == .dark {
+            return Color.white.opacity(0.075 + t * 0.075)
+        } else {
+            return Color.white.opacity(0.24 + t * 0.58)
+        }
+    }
+    static func hairlineBorder(for scheme: ColorScheme, glassOpacity: Double = 0.78) -> Color {
+        let t = (min(1.0, max(0.15, glassOpacity)) - 0.15) / 0.85
+        if scheme == .dark {
+            return Color.white.opacity(0.16 + t * 0.05)
+        } else {
+            return Color.white.opacity(0.32 + t * 0.40)
+        }
     }
     static func subtleSeparator(for scheme: ColorScheme) -> Color {
         scheme == .dark ? Color.white.opacity(0.10) : Color(red: 0.07, green: 0.20, blue: 0.14).opacity(0.10)

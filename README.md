@@ -19,15 +19,16 @@ A native macOS 14+ desktop reminder and micro-task timer crafted for easily dist
     - `"dentist tomorrow 9am"`, `"demo nov 25 at 2:30pm"`, `"mon 8:15am sync"`, `"12/01 14:00 pay rent"` -> multi-day calendar reminder
     - `"25"` -> quick 25-minute timer
 - **Full Inline & Popover Editing on Active Timers**
-  - Click a title to rename inline, hover for `-1m`, `+1m`, `+5m`, `Pause/Resume`, `Complete`, or `Delete`, or click the **Edit (`pencil`)** button on any row to edit title, duration, calendar date/time, and accent color mid-countdown.
+  - Click a title to rename inline, or hover a row to adjust (`-1m`, `+1m`, `+5m`), pause/resume, complete, delete, or click **Edit** to edit title, duration, calendar date/time, and accent color mid-countdown.
 - **Full-Screen Multi-Display Notifications + Presentation Safe Mode**
   - Frosted full-screen takeover across all connected displays when time expires, with synthesized procedural audio chimes (`AVAudioEngine`) and Force Touch haptics.
   - Optional **30-second Pre-Alert** inside the widget before taking over the screen.
   - Instant keyboard triage on full-screen alerts: `Space` / `Return` (Complete), `1`–`4` (Snooze `+1m` / `+5m` / `+10m` / `+15m`), `Esc` (Dismiss).
   - **Presentation / Call Safe Mode** toggle in the widget header and menu bar downgrades full-screen overlays to native macOS banners during screen sharing.
-- **Accountability Watchdog & Restart Recovery**
+- **Accountability Watchdog & Apple Screen Time Shortcuts**
   - When timers are running inside the `.app` bundle, a lightweight user `LaunchAgent` (`com.spacedout.app.watchdog`) keeps SpacedOut alive across crashes, force-quits, and Mac restarts.
   - Timers that expire while your Mac is off immediately catch up into the overdue alert queue on startup instead of letting you off the hook, while leaving Delete/Edit controls available inside SpacedOut.
+  - Quick links in **Settings → Sync & System** jump straight to macOS **Screen Time** (`Always Allowed`, `Downtime`, and `App Limits`) so focus sessions pair natively with Apple's system controls.
 - **Task History, User Activity Log & `.ics` Export**
   - **Task History** tab with searchable day-grouped completions, focus stats, one-click **Run Again**, and RFC 5545 `.ics` export.
   - **Activity Log** tab recording every creation, edit, time adjustment, pause/resume, snooze, restart recovery, Apple sync change, watchdog event, and removal with search, category filters, and `.txt` export.

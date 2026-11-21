@@ -527,7 +527,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         displayMode: DisplayMode = .widgetAndMenuBar,
         themeMode: ThemeMode = .system,
         widgetScale: WidgetScale = .regular,
-        widgetOpacity: Double = 0.94,
+        widgetOpacity: Double = 0.78,
         alwaysOnTop: Bool = true,
         showDockIcon: Bool = false,
         notificationStyle: NotificationStyle = .fullScreenWithPreAlert,
@@ -550,7 +550,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.displayMode = displayMode
         self.themeMode = themeMode
         self.widgetScale = widgetScale
-        self.widgetOpacity = min(1.0, max(0.72, widgetOpacity))
+        self.widgetOpacity = min(1.0, max(0.15, widgetOpacity))
         self.alwaysOnTop = alwaysOnTop
         self.showDockIcon = showDockIcon
         self.notificationStyle = notificationStyle

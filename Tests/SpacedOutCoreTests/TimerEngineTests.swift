@@ -294,4 +294,18 @@ final class TimerEngineTests: XCTestCase {
         engine.deleteReminder(id: item.id)
         XCTAssertFalse(engine.shouldArmWatchdog)
     }
+
+    func testGlassOpacityClampingAllowsSheerToSolid() {
+        let engine = TimerEngine(clock: MutableTestClock(), store: InMemoryStateStore())
+        XCTAssertEqual(engine.settings.widgetOpacity, 0.78, accuracy: 0.001)
+
+        engine.updateSettings { $0.widgetOpacity = 0.20 }
+        XCTAssertEqual(engine.settings.widgetOpacity, 0.20, accuracy: 0.001)
+
+        engine.updateSettings { $0.widgetOpacity = 0.02 }
+        XCTAssertEqual(engine.settings.widgetOpacity, 0.15, accuracy: 0.001)
+
+        engine.updateSettings { $0.widgetOpacity = 1.4 }
+        XCTAssertEqual(engine.settings.widgetOpacity, 1.0, accuracy: 0.001)
+    }
 }

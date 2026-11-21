@@ -31,7 +31,7 @@ final class StatusBarController: NSObject {
 
     func applySettings(_ settings: AppSettings) {
         popoverPanel?.appearance = SpacedTheme.nsAppearance(for: settings.themeMode)
-        popoverPanel?.alphaValue = CGFloat(settings.widgetOpacity)
+        popoverPanel?.alphaValue = 1.0
         refreshStatusTitle()
     }
 

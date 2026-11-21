@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ReminderRowView: View {
     let item: ReminderItem
+    var glassOpacity: Double = 0.78
     var onTogglePause: () -> Void
     var onAdjust: (Int) -> Void
     var onEdit: (String?, Int?, Date?, AccentPreset?) -> Void
@@ -125,31 +126,14 @@ struct ReminderRowView: View {
 
                     Spacer(minLength: 6)
 
-                    HStack(spacing: 6) {
-                        Text(item.formattedRemaining(at: now))
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(
-                                isUrgent
-                                    ? SpacedTheme.overdueCoral(for: colorScheme)
-                                    : SpacedTheme.inkPrimary(for: colorScheme)
-                            )
-
-                        Button {
-                            onPreparePopover()
-                            showEditPopover = true
-                        } label: {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(SpacedTheme.inkMuted(for: colorScheme))
-                                .frame(width: 22, height: 22)
-                                .background(Circle().fill(SpacedTheme.chipSurface(for: colorScheme)))
-                        }
-                        .buttonStyle(.plain)
-                        .contentShape(Circle())
-                        .opacity(isHovered || showEditPopover ? 1 : 0.45)
-                        .help("Edit title, time & date")
-                    }
+                    Text(item.formattedRemaining(at: now))
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(
+                            isUrgent
+                                ? SpacedTheme.overdueCoral(for: colorScheme)
+                                : SpacedTheme.inkPrimary(for: colorScheme)
+                        )
                 }
 
                 if isHovered || showEditPopover {
@@ -171,11 +155,11 @@ struct ReminderRowView: View {
                                 .padding(.vertical, 3.5)
                                 .background(
                                     Capsule()
-                                        .fill(SpacedTheme.chipSurface(for: colorScheme))
+                                        .fill(SpacedTheme.chipSurface(for: colorScheme, glassOpacity: glassOpacity))
                                 )
                                 .overlay(
                                     Capsule()
-                                        .stroke(SpacedTheme.hairlineBorder(for: colorScheme), lineWidth: 0.7)
+                                        .stroke(SpacedTheme.hairlineBorder(for: colorScheme, glassOpacity: glassOpacity), lineWidth: 0.7)
                                 )
                         }
                         .buttonStyle(.plain)
@@ -202,7 +186,7 @@ struct ReminderRowView: View {
                                 .font(.system(size: 10.5, weight: .medium))
                                 .foregroundStyle(SpacedTheme.inkMuted(for: colorScheme))
                                 .frame(width: 24, height: 24)
-                                .background(Circle().fill(SpacedTheme.chipSurface(for: colorScheme)))
+                                .background(Circle().fill(SpacedTheme.chipSurface(for: colorScheme, glassOpacity: glassOpacity)))
                         }
                         .buttonStyle(.plain)
                         .contentShape(Circle())
@@ -215,14 +199,14 @@ struct ReminderRowView: View {
             .padding(.vertical, 9)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(SpacedTheme.cardSurface(for: colorScheme))
+                    .fill(SpacedTheme.cardSurface(for: colorScheme, glassOpacity: glassOpacity))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(
                         isUrgent
                             ? SpacedTheme.overdueCoral(for: colorScheme).opacity(0.45)
-                            : SpacedTheme.hairlineBorder(for: colorScheme),
+                            : SpacedTheme.hairlineBorder(for: colorScheme, glassOpacity: glassOpacity),
                         lineWidth: 1
                     )
             )

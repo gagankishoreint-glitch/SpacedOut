@@ -196,6 +196,14 @@ final class AppCoordinator {
         utilityWindowManager?.showSettings()
     }
 
+    func openScreenTimeSettings(subpath: String? = nil) {
+        let base = "x-apple.systempreferences:com.apple.Screen-Time-Settings.extension"
+        let raw = subpath.map { "\(base)?path=\($0)" } ?? base
+        if let url = URL(string: raw) {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
     func applyDisplayMode(_ mode: DisplayMode, initialLaunch: Bool = false) {
         switch mode {
         case .widgetAndMenuBar:

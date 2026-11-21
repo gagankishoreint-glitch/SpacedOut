@@ -35,6 +35,10 @@ struct FloatingWidgetView: View {
         CGFloat(coordinator.engine.settings.widgetScale.width)
     }
 
+    private var glassOpacity: Double {
+        min(1.0, max(0.15, coordinator.engine.settings.widgetOpacity))
+    }
+
     var body: some View {
         let scheme = effectiveColorScheme
         let inkPrimary = SpacedTheme.inkPrimary(for: scheme)
@@ -120,14 +124,18 @@ struct FloatingWidgetView: View {
             }
         }
         .background {
+            let glass = glassOpacity
+
             ZStack {
                 VisualEffectView(
-                    material: .hudWindow,
+                    material: .popover,
                     blendingMode: .behindWindow,
-                    state: .active
+                    state: .active,
+                    isHidden: glass < 0.28
                 )
 
-                SpacedTheme.widgetTintWash(for: scheme)
+                SpacedTheme.widgetGlassWash(for: scheme, opacity: glass)
+                SpacedTheme.widgetSolidCover(for: scheme, opacity: glass)
 
                 if !isMenuBarPopover {
                     WindowDragSurface()
@@ -137,7 +145,7 @@ struct FloatingWidgetView: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(SpacedTheme.hairlineBorder(for: scheme), lineWidth: 1)
+                .stroke(SpacedTheme.hairlineBorder(for: scheme, glassOpacity: glassOpacity), lineWidth: 1)
         )
         .preferredColorScheme(SpacedTheme.colorScheme(for: coordinator.engine.settings.themeMode))
         .onChange(of: coordinator.focusInputTrigger) { _, _ in
@@ -344,7 +352,7 @@ struct FloatingWidgetView: View {
                             Circle().fill(
                                 showCalendarPopover
                                     ? accent.opacity(0.14)
-                                    : SpacedTheme.chipSurface(for: scheme)
+                                    : SpacedTheme.chipSurface(for: scheme, glassOpacity: glassOpacity)
                             )
                         )
                 }
@@ -387,14 +395,14 @@ struct FloatingWidgetView: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(SpacedTheme.cardSurface(for: scheme))
+                    .fill(SpacedTheme.cardSurface(for: scheme, glassOpacity: glassOpacity))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
                     .stroke(
                         isInputFocused
                             ? accent.opacity(0.65)
-                            : SpacedTheme.hairlineBorder(for: scheme),
+                            : SpacedTheme.hairlineBorder(for: scheme, glassOpacity: glassOpacity),
                         lineWidth: 1
                     )
             )
@@ -444,7 +452,12 @@ struct FloatingWidgetView: View {
     ) -> some View {
         HStack(spacing: 6) {
             ForEach(coordinator.engine.settings.quickPresetsMinutes, id: \.self) { mins in
-                PresetChipButton(label: "\(mins)m", scheme: scheme, inkPrimary: inkPrimary) {
+                PresetChipButton(
+                    label: "\(mins)m",
+                    scheme: scheme,
+                    inkPrimary: inkPrimary,
+                    glassOpacity: glassOpacity
+                ) {
                     submitPreset(minutes: mins)
                 }
                 .help("Start \(mins)-minute reminder immediately")
@@ -506,6 +519,7 @@ struct FloatingWidgetView: View {
     private func rowView(for item: ReminderItem) -> some View {
         ReminderRowView(
             item: item,
+            glassOpacity: glassOpacity,
             onTogglePause: { coordinator.togglePause(id: item.id) },
             onAdjust: { delta in coordinator.adjustRemaining(id: item.id, deltaSeconds: delta) },
             onEdit: { title, duration, targetDate, accent in
@@ -556,7 +570,7 @@ struct FloatingWidgetView: View {
                 .padding(.vertical, 2)
                 .background(
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(SpacedTheme.chipSurface(for: scheme))
+                        .fill(SpacedTheme.chipSurface(for: scheme, glassOpacity: glassOpacity))
                 )
         }
         .padding(.top, 2)
@@ -745,6 +759,7 @@ private struct PresetChipButton: View {
     let label: String
     let scheme: ColorScheme
     let inkPrimary: Color
+    let glassOpacity: Double
     let action: () -> Void
 
     @State private var isHovered = false
@@ -762,13 +777,13 @@ private struct PresetChipButton: View {
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .fill(
                             isHovered
-                                ? SpacedTheme.cardSurface(for: scheme)
-                                : SpacedTheme.chipSurface(for: scheme)
+                                ? SpacedTheme.cardSurface(for: scheme, glassOpacity: glassOpacity)
+                                : SpacedTheme.chipSurface(for: scheme, glassOpacity: glassOpacity)
                         )
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .stroke(SpacedTheme.hairlineBorder(for: scheme), lineWidth: 0.9)
+                        .stroke(SpacedTheme.hairlineBorder(for: scheme, glassOpacity: glassOpacity), lineWidth: 0.9)
                 )
         }
         .buttonStyle(.plain)

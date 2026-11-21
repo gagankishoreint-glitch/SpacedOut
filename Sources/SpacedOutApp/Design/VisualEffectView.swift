@@ -6,6 +6,7 @@ struct VisualEffectView: NSViewRepresentable {
     var blendingMode: NSVisualEffectView.BlendingMode
     var state: NSVisualEffectView.State = .active
     var emphasized: Bool = false
+    var isHidden: Bool = false
 
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
@@ -13,6 +14,7 @@ struct VisualEffectView: NSViewRepresentable {
         view.blendingMode = blendingMode
         view.state = state
         view.isEmphasized = emphasized
+        view.isHidden = isHidden
         return view
     }
 
@@ -21,6 +23,7 @@ struct VisualEffectView: NSViewRepresentable {
         nsView.blendingMode = blendingMode
         nsView.state = state
         nsView.isEmphasized = emphasized
+        nsView.isHidden = isHidden
     }
 }
 
