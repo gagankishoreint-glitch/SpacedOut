@@ -4,6 +4,10 @@ options:
   deploymentTarget:
     macOS: "14.0"
   xcodeVersion: "16.0"
+  fileTypes:
+    icon:
+      file: true
+      buildPhase: resources
 
 packages:
   SpacedOutLocal:
@@ -21,7 +25,7 @@ targets:
     platform: macOS
     sources:
       - path: Sources/SpacedOutApp
-      - path: AppResources/Assets.xcassets
+      - path: AppResources/AppIcon.icon
     info:
       path: AppResources/Info.plist
     entitlements:

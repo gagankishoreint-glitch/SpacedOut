@@ -66,7 +66,7 @@ swift test
 ```bash
 make run
 ```
-This runs `swift test`, compiles a release build, assembles `dist/SpacedOut.app` with `Info.plist`, `AppIcon.icns`, and entitlements, ad-hoc signs it, and opens it.
+This runs `swift test`, compiles a release build, compiles `AppIcon.icon` into `Assets.car` and `AppIcon.icns` (with `Assets.xcassets` / `AppIcon.icns` fallbacks), assembles `dist/SpacedOut.app` with `Info.plist` and entitlements, ad-hoc signs it, and opens it.
 
 ### 3. Open in Xcode
 - **Direct SwiftPM open:** `open Package.swift`
