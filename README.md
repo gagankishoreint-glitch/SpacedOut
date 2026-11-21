@@ -25,21 +25,26 @@ Built with Swift, SwiftUI and AppKit.
 ## Screenshots
 
 <p align="center">
-  <img src="docs/images/widget.png" width="65%" alt="SpacedOut floating widget">
+  <img src="docs/images/app-icon.png" width="100" alt="SpacedOut app icon">
 </p>
+
+Floating widget
 
 <p align="center">
-  <em>Floating widget with quick input, timer presets and task controls.</em>
+  <img src="docs/images/widget.png" width="720" alt="SpacedOut floating widget">
 </p>
+
+Full-screen alert
 
 <p align="center">
-  <img src="docs/images/settings.png" width="85%" alt="SpacedOut settings window">
+  <img src="docs/images/alert.png" width="720" alt="SpacedOut full-screen alert">
 </p>
+
+Scheduling reminders
 
 <p align="center">
-  <em>Settings and workflow customisation.</em>
+  <img src="docs/images/schedule-reminder.png" width="650" alt="SpacedOut scheduling popover">
 </p>
-
 <!-- Add demo.gif here when a real application recording is available. -->
 
 ## Features
