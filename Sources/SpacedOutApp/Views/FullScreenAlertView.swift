@@ -57,9 +57,7 @@ struct FullScreenAlertView: View {
                                 Circle().stroke(accent.opacity(0.35), lineWidth: 1.5)
                             )
 
-                        Image(systemName: "bell.badge.fill")
-                            .font(.system(size: 32, weight: .semibold))
-                            .foregroundStyle(accent)
+                        BrandLogoMark(size: 40, color: accent)
                     }
                     .onAppear {
                         guard !reduceMotion else { return }
@@ -124,6 +122,7 @@ struct FullScreenAlertView: View {
                             .shadow(color: accent.opacity(0.28), radius: 12, y: 4)
                         }
                         .buttonStyle(.plain)
+                        .contentShape(Capsule())
 
                         // Instant Snooze Pills
                         HStack(spacing: 10) {
@@ -151,6 +150,7 @@ struct FullScreenAlertView: View {
                                 .padding(.vertical, 6)
                         }
                         .buttonStyle(.plain)
+                        .contentShape(Capsule())
                     }
                     .padding(.top, 6)
 
@@ -212,6 +212,7 @@ private struct SnoozePillButton: View {
             )
         }
         .buttonStyle(.plain)
+        .contentShape(Capsule())
         .onHover { isHovered = $0 }
     }
 }

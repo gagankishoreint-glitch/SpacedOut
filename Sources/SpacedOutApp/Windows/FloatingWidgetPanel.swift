@@ -20,7 +20,7 @@ final class FloatingWidgetController: NSObject, NSWindowDelegate {
 
         let initialWidth = CGFloat(coordinator.engine.settings.widgetScale.width)
         let panel = FloatingWidgetPanel(
-            contentRect: NSRect(x: 0, y: 0, width: initialWidth, height: 320),
+            contentRect: NSRect(x: 0, y: 0, width: initialWidth, height: 180),
             styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -36,19 +36,32 @@ final class FloatingWidgetController: NSObject, NSWindowDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         panel.animationBehavior = .utilityWindow
 
-        let root = AnyView(
-            FloatingWidgetView(isMenuBarPopover: false)
-                .environment(coordinator)
-        )
-        let hostingView = NSHostingView(rootView: root)
-        hostingView.sizingOptions = [.intrinsicContentSize]
-        panel.contentView = hostingView
-
         self.panel = panel
-        self.hostingView = hostingView
+
+        let placeholder = NSHostingView(rootView: AnyView(EmptyView()))
+        self.hostingView = placeholder
 
         super.init()
+
+        let root = AnyView(
+            FloatingWidgetView(
+                isMenuBarPopover: false,
+                onPreferredSizeChange: { [weak self] size in
+                    self?.resizeKeepingTopAnchor(to: size)
+                }
+            )
+            .environment(coordinator)
+        )
+        let hostingView = NSHostingView(rootView: root)
+        hostingView.sizingOptions = []
+        self.hostingView = hostingView
+        panel.contentView = hostingView
         panel.delegate = self
+
+        let initialFitting = hostingView.fittingSize
+        if initialFitting.width > 50 && initialFitting.height > 50 {
+            panel.setContentSize(NSSize(width: ceil(initialFitting.width), height: ceil(initialFitting.height)))
+        }
 
         applySettings(coordinator.engine.settings)
         restorePositionOrDefault()
@@ -102,6 +115,29 @@ final class FloatingWidgetController: NSObject, NSWindowDelegate {
         coordinator.engine.updateSettings {
             $0.widgetOrigin = SavedPoint(x: Double(origin.x), y: Double(origin.y))
         }
+    }
+
+    private func resizeKeepingTopAnchor(to targetSize: CGSize) {
+        let newWidth = ceil(targetSize.width)
+        let newHeight = ceil(targetSize.height)
+        guard newWidth > 50, newHeight > 50 else { return }
+
+        let current = panel.frame
+        if abs(current.width - newWidth) <= 0.5 && abs(current.height - newHeight) <= 0.5 {
+            return
+        }
+
+        let topY = current.maxY
+        let updatedFrame = NSRect(
+            x: current.origin.x,
+            y: topY - newHeight,
+            width: newWidth,
+            height: newHeight
+        )
+        isProgrammaticMove = true
+        panel.setFrame(updatedFrame, display: true, animate: false)
+        isProgrammaticMove = false
+        clampInsideVisibleScreen()
     }
 
     private func restorePositionOrDefault() {

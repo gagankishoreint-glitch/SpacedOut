@@ -62,7 +62,7 @@ final class UtilityWindowManager {
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 480),
+            contentRect: NSRect(x: 0, y: 0, width: 570, height: 510),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false

@@ -26,8 +26,8 @@ struct SettingsView: View {
                     Label("Reminders & Data", systemImage: "checklist")
                 }
         }
-        .padding(16)
-        .frame(width: 550, height: 450)
+        .padding(18)
+        .frame(width: 570, height: 510)
         .preferredColorScheme(SpacedTheme.colorScheme(for: coordinator.engine.settings.themeMode))
     }
 }
@@ -58,15 +58,17 @@ private struct GeneralSettingsTab: View {
             }
 
             Section("Quick Presets & Hotkey") {
-                HStack {
-                    Text("Quick Preset Minutes")
-                    Spacer()
-                    TextField("5, 10, 15, 25", text: $presetsText)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 170)
-                        .onSubmit { applyPresetsText() }
-                    Button("Apply") { applyPresetsText() }
-                        .controlSize(.small)
+                LabeledContent("Quick Preset Minutes") {
+                    HStack(spacing: 8) {
+                        TextField("", text: $presetsText, prompt: Text("5, 10, 15, 25"))
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 160)
+                            .onSubmit { applyPresetsText() }
+                        Button("Apply") { applyPresetsText() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
                 }
 
                 Stepper(
@@ -81,9 +83,7 @@ private struct GeneralSettingsTab: View {
                     in: 1...240
                 )
 
-                HStack {
-                    Text("Toggle Global Shortcut")
-                    Spacer()
+                LabeledContent("Toggle Global Shortcut") {
                     ShortcutRecorderView(
                         currentBinding: coordinator.engine.settings.globalShortcut,
                         onCaptured: { binding in
@@ -115,7 +115,7 @@ private struct GeneralSettingsTab: View {
                 .disabled(!LaunchAtLoginService.isAvailableInCurrentBundle)
 
                 if !LaunchAtLoginService.isAvailableInCurrentBundle {
-                    Text("Launch at Login is active when launched from the built SpacedOut.app bundle.")
+                    Text("Launch at Login activates when running the built SpacedOut.app bundle (via make run).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -167,18 +167,22 @@ private struct AppearanceSettingsTab: View {
                     }
                 }
 
-                HStack {
-                    Text("Glass Opacity")
-                    Slider(
-                        value: Binding(
-                            get: { coordinator.engine.settings.widgetOpacity },
-                            set: { val in coordinator.engine.updateSettings { $0.widgetOpacity = val } }
-                        ),
-                        in: 0.72...1.0
-                    )
-                    Text("\(Int((coordinator.engine.settings.widgetOpacity * 100).rounded()))%")
-                        .monospacedDigit()
-                        .frame(width: 42, alignment: .trailing)
+                LabeledContent("Glass Opacity") {
+                    HStack(spacing: 10) {
+                        Slider(
+                            value: Binding(
+                                get: { coordinator.engine.settings.widgetOpacity },
+                                set: { val in coordinator.engine.updateSettings { $0.widgetOpacity = val } }
+                            ),
+                            in: 0.72...1.0
+                        )
+                        .labelsHidden()
+                        .frame(width: 170)
+
+                        Text("\(Int((coordinator.engine.settings.widgetOpacity * 100).rounded()))%")
+                            .monospacedDigit()
+                            .frame(width: 40, alignment: .trailing)
+                    }
                 }
             }
 
@@ -193,13 +197,12 @@ private struct AppearanceSettingsTab: View {
                     set: { val in coordinator.engine.updateSettings { $0.showDockIcon = val } }
                 ))
 
-                HStack {
-                    Text("Widget Screen Placement")
-                    Spacer()
+                LabeledContent("Widget Screen Placement") {
                     Button("Reset to Top-Right") {
                         coordinator.resetWidgetPosition()
                         coordinator.showFloatingWidget(focusInput: false)
                     }
+                    .buttonStyle(.bordered)
                 }
             }
         }
@@ -243,8 +246,7 @@ private struct AlertsSettingsTab: View {
                     set: { val in coordinator.engine.updateSettings { $0.presentationSafeMode = val } }
                 ))
 
-                HStack {
-                    Spacer()
+                LabeledContent("Preview Overlay") {
                     Button("Test Full-Screen Alert") {
                         coordinator.previewFullScreenAlert()
                     }
@@ -258,20 +260,25 @@ private struct AlertsSettingsTab: View {
                     set: { val in coordinator.engine.updateSettings { $0.soundEnabled = val } }
                 ))
 
-                HStack {
-                    Picker("Chime Sound", selection: Binding(
-                        get: { coordinator.engine.settings.soundPreset },
-                        set: { preset in coordinator.engine.updateSettings { $0.soundPreset = preset } }
-                    )) {
-                        ForEach(SoundPreset.allCases) { preset in
-                            Text(preset.title).tag(preset)
+                LabeledContent("Chime Sound") {
+                    HStack(spacing: 8) {
+                        Picker("", selection: Binding(
+                            get: { coordinator.engine.settings.soundPreset },
+                            set: { preset in coordinator.engine.updateSettings { $0.soundPreset = preset } }
+                        )) {
+                            ForEach(SoundPreset.allCases) { preset in
+                                Text(preset.title).tag(preset)
+                            }
                         }
-                    }
+                        .labelsHidden()
+                        .frame(width: 155)
 
-                    Button("Preview") {
-                        coordinator.previewSound(coordinator.engine.settings.soundPreset)
+                        Button("Preview") {
+                            coordinator.previewSound(coordinator.engine.settings.soundPreset)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(coordinator.engine.settings.soundPreset == .silent)
                     }
-                    .disabled(coordinator.engine.settings.soundPreset == .silent)
                 }
 
                 Toggle("Trackpad Haptic Feedback", isOn: Binding(
@@ -301,9 +308,7 @@ private struct RemindersDataSettingsTab: View {
                     }
                 ))
 
-                HStack {
-                    Text("Permission Status")
-                    Spacer()
+                LabeledContent("Permission Status") {
                     Text(coordinator.remindersSync.authState.label)
                         .foregroundStyle(
                             coordinator.remindersSync.authState == .authorized ? .green : .secondary
@@ -311,26 +316,34 @@ private struct RemindersDataSettingsTab: View {
                 }
 
                 if coordinator.remindersSync.authState == .notDetermined {
-                    Button("Request Reminders Access") {
-                        Task { @MainActor in
-                            _ = await coordinator.remindersSync.requestAccess()
+                    LabeledContent("Authorization") {
+                        Button("Request Reminders Access") {
+                            Task { @MainActor in
+                                _ = await coordinator.remindersSync.requestAccess()
+                            }
                         }
+                        .buttonStyle(.bordered)
                     }
                 } else if coordinator.remindersSync.authState == .denied || coordinator.remindersSync.authState == .writeOnly {
-                    Button("Open Privacy Settings…") {
-                        coordinator.remindersSync.openSystemRemindersPrivacy()
+                    LabeledContent("Authorization") {
+                        Button("Open Privacy Settings…") {
+                            coordinator.remindersSync.openSystemRemindersPrivacy()
+                        }
+                        .buttonStyle(.bordered)
                     }
                 }
 
-                HStack {
-                    Text("Target List Name")
-                    Spacer()
-                    TextField("SpacedOut", text: $listNameDraft)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 150)
-                        .onSubmit { applyListName() }
-                    Button("Save") { applyListName() }
-                        .controlSize(.small)
+                LabeledContent("Target List Name") {
+                    HStack(spacing: 8) {
+                        TextField("", text: $listNameDraft, prompt: Text("SpacedOut"))
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 155)
+                            .onSubmit { applyListName() }
+                        Button("Save") { applyListName() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
                 }
 
                 if let syncError = coordinator.remindersSync.lastSyncError {
@@ -341,20 +354,18 @@ private struct RemindersDataSettingsTab: View {
             }
 
             Section("Export & Storage") {
-                HStack {
-                    Text("Calendar Export (.ics)")
-                    Spacer()
+                LabeledContent("Calendar Export (.ics)") {
                     Button("Export Reminders & History…") {
                         coordinator.exportICS()
                     }
+                    .buttonStyle(.bordered)
                 }
 
-                HStack {
-                    Text("Reset Local App Data")
-                    Spacer()
+                LabeledContent("Reset Local App Data") {
                     Button("Reset Everything", role: .destructive) {
                         showResetConfirmation = true
                     }
+                    .buttonStyle(.bordered)
                 }
             }
         }

@@ -47,13 +47,18 @@ final class StatusBarController: NSObject {
             button.title = " \(safePrefix)\(triggered.formattedRemaining(at: now))"
             button.font = .monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
         } else if let next = coordinator.engine.earliestActiveReminder {
-            button.image = NSImage(systemSymbolName: "timer", accessibilityDescription: "SpacedOut Active")
+            button.image = BrandLogo.menuBarImage(pointSize: 16)
+                ?? NSImage(systemSymbolName: "timer", accessibilityDescription: "SpacedOut Active")
             button.imagePosition = .imageLeading
             button.title = " \(safePrefix)\(next.formattedRemaining(at: now))"
             button.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
         } else {
-            let symbolName = coordinator.engine.settings.presentationSafeMode ? "eye.slash.circle" : "timer"
-            button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "SpacedOut")
+            if coordinator.engine.settings.presentationSafeMode {
+                button.image = NSImage(systemSymbolName: "eye.slash.circle", accessibilityDescription: "SpacedOut Safe Mode")
+            } else {
+                button.image = BrandLogo.menuBarImage(pointSize: 17)
+                    ?? NSImage(systemSymbolName: "sparkles", accessibilityDescription: "SpacedOut")
+            }
             button.imagePosition = .imageOnly
             button.title = ""
         }
@@ -74,18 +79,7 @@ final class StatusBarController: NSObject {
         }
 
         let panel = ensurePopoverPanel()
-        let buttonRect = buttonWindow.convertToScreen(button.frame)
-        let panelSize = panel.frame.size
-
-        var x = buttonRect.midX - panelSize.width / 2
-        let y = buttonRect.minY - panelSize.height - 6
-
-        if let screen = buttonWindow.screen ?? NSScreen.main {
-            let visible = screen.visibleFrame
-            x = min(max(x, visible.minX + 8), visible.maxX - panelSize.width - 8)
-        }
-
-        panel.setFrameOrigin(NSPoint(x: x, y: y))
+        positionPopover(panel, below: button, buttonWindow: buttonWindow)
         panel.orderFrontRegardless()
         panel.makeKey()
         coordinator.isMenuBarPopoverVisible = true
@@ -201,7 +195,7 @@ final class StatusBarController: NSObject {
 
         let width = CGFloat(coordinator.engine.settings.widgetScale.width)
         let panel = FloatingWidgetPanel(
-            contentRect: NSRect(x: 0, y: 0, width: width, height: 320),
+            contentRect: NSRect(x: 0, y: 0, width: width, height: 180),
             styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -217,13 +211,69 @@ final class StatusBarController: NSObject {
         panel.appearance = SpacedTheme.nsAppearance(for: coordinator.engine.settings.themeMode)
 
         let hosting = NSHostingView(
-            rootView: FloatingWidgetView(isMenuBarPopover: true)
-                .environment(coordinator)
+            rootView: FloatingWidgetView(
+                isMenuBarPopover: true,
+                onPreferredSizeChange: { [weak self] size in
+                    self?.resizePopoverKeepingTopAnchor(to: size)
+                }
+            )
+            .environment(coordinator)
         )
-        hosting.sizingOptions = [.intrinsicContentSize]
+        hosting.sizingOptions = []
         panel.contentView = hosting
+
+        let initialFitting = hosting.fittingSize
+        if initialFitting.width > 50 && initialFitting.height > 50 {
+            panel.setContentSize(NSSize(width: ceil(initialFitting.width), height: ceil(initialFitting.height)))
+        }
+
         popoverPanel = panel
         return panel
+    }
+
+    private func positionPopover(_ panel: FloatingWidgetPanel, below button: NSStatusBarButton, buttonWindow: NSWindow) {
+        let buttonRect = buttonWindow.convertToScreen(button.frame)
+        let panelSize = panel.frame.size
+
+        var x = buttonRect.midX - panelSize.width / 2
+        let y = buttonRect.minY - panelSize.height - 6
+
+        if let screen = buttonWindow.screen ?? NSScreen.main {
+            let visible = screen.visibleFrame
+            x = min(max(x, visible.minX + 8), visible.maxX - panelSize.width - 8)
+        }
+
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    private func resizePopoverKeepingTopAnchor(to targetSize: CGSize) {
+        guard let panel = popoverPanel else { return }
+        let newWidth = ceil(targetSize.width)
+        let newHeight = ceil(targetSize.height)
+        guard newWidth > 50, newHeight > 50 else { return }
+
+        let current = panel.frame
+        if abs(current.width - newWidth) <= 0.5 && abs(current.height - newHeight) <= 0.5 {
+            return
+        }
+
+        let topY = current.maxY
+        var updatedFrame = NSRect(
+            x: current.origin.x,
+            y: topY - newHeight,
+            width: newWidth,
+            height: newHeight
+        )
+
+        if let screen = panel.screen ?? NSScreen.main {
+            let visible = screen.visibleFrame
+            updatedFrame.origin.x = min(max(updatedFrame.origin.x, visible.minX + 8), visible.maxX - newWidth - 8)
+            if updatedFrame.origin.y < visible.minY + 8 {
+                updatedFrame.origin.y = visible.minY + 8
+            }
+        }
+
+        panel.setFrame(updatedFrame, display: true, animate: false)
     }
 
     private func installOutsideClickMonitor() {

@@ -1,8 +1,19 @@
 import SpacedOutCore
 import SwiftUI
 
+private struct WidgetContentSizeKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        let next = nextValue()
+        if next.width > 0 && next.height > 0 {
+            value = next
+        }
+    }
+}
+
 struct FloatingWidgetView: View {
     let isMenuBarPopover: Bool
+    var onPreferredSizeChange: ((CGSize) -> Void)? = nil
 
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.colorScheme) private var systemColorScheme
@@ -56,7 +67,6 @@ struct FloatingWidgetView: View {
             presetsRow(
                 scheme: scheme,
                 inkPrimary: inkPrimary,
-                inkSecondary: inkSecondary,
                 accent: accent
             )
 
@@ -97,6 +107,17 @@ struct FloatingWidgetView: View {
         .padding(14)
         .frame(width: widgetWidth)
         .fixedSize(horizontal: false, vertical: true)
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .preference(key: WidgetContentSizeKey.self, value: proxy.size)
+            }
+        }
+        .onPreferenceChange(WidgetContentSizeKey.self) { newSize in
+            if newSize.width > 0 && newSize.height > 0 {
+                onPreferredSizeChange?(newSize)
+            }
+        }
         .background {
             ZStack {
                 VisualEffectView(
@@ -140,15 +161,14 @@ struct FloatingWidgetView: View {
         accent: Color,
         activeCount: Int
     ) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             HStack(spacing: 6) {
-                Circle()
-                    .fill(
-                        coordinator.engine.settings.presentationSafeMode
-                            ? SpacedTheme.urgencyAmber(for: scheme)
-                            : (activeCount > 0 ? accent : inkMuted.opacity(0.45))
-                    )
-                    .frame(width: 7, height: 7)
+                BrandLogoMark(
+                    size: 16,
+                    color: coordinator.engine.settings.presentationSafeMode
+                        ? SpacedTheme.urgencyAmber(for: scheme)
+                        : (activeCount > 0 ? accent : inkPrimary)
+                )
 
                 Text("SpacedOut")
                     .font(.system(size: 12.5, weight: .semibold))
@@ -167,80 +187,62 @@ struct FloatingWidgetView: View {
 
             Spacer()
 
-            // Presentation / Call Safe Mode toggle
-            Button {
-                coordinator.togglePresentationSafeMode()
-            } label: {
-                Image(systemName: coordinator.engine.settings.presentationSafeMode ? "eye.slash.fill" : "eye")
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(
-                        coordinator.engine.settings.presentationSafeMode
-                            ? SpacedTheme.urgencyAmber(for: scheme)
-                            : inkMuted
-                    )
-                    .frame(width: 24, height: 24)
-                    .background(
-                        Circle().fill(
-                            coordinator.engine.settings.presentationSafeMode
-                                ? SpacedTheme.urgencyAmber(for: scheme).opacity(0.15)
-                                : Color.clear
-                        )
-                    )
-            }
-            .buttonStyle(.plain)
-            .help(
-                coordinator.engine.settings.presentationSafeMode
+            HeaderIconButton(
+                systemName: coordinator.engine.settings.presentationSafeMode ? "eye.slash.fill" : "eye",
+                tint: coordinator.engine.settings.presentationSafeMode
+                    ? SpacedTheme.urgencyAmber(for: scheme)
+                    : inkMuted,
+                isActive: coordinator.engine.settings.presentationSafeMode,
+                scheme: scheme,
+                helpText: coordinator.engine.settings.presentationSafeMode
                     ? "Safe Mode On: Full-screen alerts downgraded to banners"
                     : "Safe Mode Off: Click to suppress full-screen takeovers during calls"
-            )
+            ) {
+                coordinator.togglePresentationSafeMode()
+            }
 
-            // Rotary Dial toggle
-            Button {
+            HeaderIconButton(
+                systemName: coordinator.isDialExpanded ? "dial.medium.fill" : "dial.medium",
+                tint: coordinator.isDialExpanded ? accent : inkMuted,
+                isActive: coordinator.isDialExpanded,
+                scheme: scheme,
+                helpText: coordinator.isDialExpanded ? "Hide rotary dial" : "Show rotary dial (1–99m)"
+            ) {
                 withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.85)) {
                     coordinator.isDialExpanded.toggle()
                 }
-            } label: {
-                Image(systemName: coordinator.isDialExpanded ? "dial.medium.fill" : "dial.medium")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(coordinator.isDialExpanded ? accent : inkMuted)
-                    .frame(width: 24, height: 24)
             }
-            .buttonStyle(.plain)
-            .help(coordinator.isDialExpanded ? "Hide rotary dial" : "Show rotary dial (1–99m)")
 
-            Button {
+            HeaderIconButton(
+                systemName: "clock.arrow.circlepath",
+                tint: inkMuted,
+                isActive: false,
+                scheme: scheme,
+                helpText: "Task History"
+            ) {
                 coordinator.openHistoryWindow()
-            } label: {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(inkMuted)
-                    .frame(width: 24, height: 24)
             }
-            .buttonStyle(.plain)
-            .help("Task History")
 
-            Button {
+            HeaderIconButton(
+                systemName: "gearshape",
+                tint: inkMuted,
+                isActive: false,
+                scheme: scheme,
+                helpText: "Settings"
+            ) {
                 coordinator.openSettingsWindow()
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundStyle(inkMuted)
-                    .frame(width: 24, height: 24)
             }
-            .buttonStyle(.plain)
-            .help("Settings")
 
             if !isMenuBarPopover {
-                Button {
+                HeaderIconButton(
+                    systemName: "minus",
+                    tint: inkMuted,
+                    isActive: false,
+                    scheme: scheme,
+                    helpText: "Hide widget (\(coordinator.engine.settings.globalShortcut.displayString))"
+                ) {
                     coordinator.hideFloatingWidget()
-                } label: {
-                    Image(systemName: "minus")
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(inkMuted)
-                        .frame(width: 24, height: 24)
                 }
-                .buttonStyle(.plain)
-                .help("Hide widget (\(coordinator.engine.settings.globalShortcut.displayString))")
             }
         }
     }
@@ -263,19 +265,33 @@ struct FloatingWidgetView: View {
 
                 Spacer()
 
-                Button("+5m") {
+                Button {
                     coordinator.adjustRemaining(id: item.id, deltaSeconds: 300)
+                } label: {
+                    Text("+5m")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(amber)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3.5)
+                        .background(Capsule().fill(amber.opacity(0.14)))
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(amber)
+                .contentShape(Capsule())
 
-                Button("Done") {
+                Button {
                     coordinator.resolveAlert(id: item.id, action: .complete)
+                } label: {
+                    Text("Done")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(SpacedTheme.accent(.mint, scheme: scheme))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3.5)
+                        .background(
+                            Capsule().fill(SpacedTheme.accent(.mint, scheme: scheme).opacity(0.14))
+                        )
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(SpacedTheme.accent(.mint, scheme: scheme))
+                .contentShape(Capsule())
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
@@ -318,10 +334,12 @@ struct FloatingWidgetView: View {
                     submitQuickInput()
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 19))
+                        .font(.system(size: 20))
                         .foregroundStyle(accent)
+                        .frame(width: 26, height: 26)
                 }
                 .buttonStyle(.plain)
+                .contentShape(Circle())
                 .help("Start reminder (Return)")
             }
             .padding(.horizontal, 11)
@@ -372,30 +390,13 @@ struct FloatingWidgetView: View {
     private func presetsRow(
         scheme: ColorScheme,
         inkPrimary: Color,
-        inkSecondary: Color,
         accent: Color
     ) -> some View {
         HStack(spacing: 6) {
             ForEach(coordinator.engine.settings.quickPresetsMinutes, id: \.self) { mins in
-                Button {
+                PresetChipButton(label: "\(mins)m", scheme: scheme, inkPrimary: inkPrimary) {
                     submitPreset(minutes: mins)
-                } label: {
-                    Text("\(mins)m")
-                        .font(.system(size: 11.5, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(inkPrimary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .fill(SpacedTheme.chipSurface(for: scheme))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .stroke(SpacedTheme.hairlineBorder(for: scheme), lineWidth: 0.9)
-                        )
                 }
-                .buttonStyle(.plain)
                 .help("Start \(mins)-minute reminder immediately")
             }
 
@@ -424,6 +425,7 @@ struct FloatingWidgetView: View {
                 )
             }
             .buttonStyle(.plain)
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             .help("Toggle rotary time dial")
         }
     }
@@ -527,5 +529,71 @@ struct FloatingWidgetView: View {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         coordinator.createDialReminder(title: trimmed)
         inputText = ""
+    }
+}
+
+private struct HeaderIconButton: View {
+    let systemName: String
+    let tint: Color
+    let isActive: Bool
+    let scheme: ColorScheme
+    let helpText: String
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(tint)
+                .frame(width: 26, height: 26)
+                .background(
+                    Circle().fill(
+                        isActive
+                            ? tint.opacity(0.15)
+                            : (isHovered ? SpacedTheme.chipSurface(for: scheme) : Color.clear)
+                    )
+                )
+        }
+        .buttonStyle(.plain)
+        .contentShape(Circle())
+        .onHover { isHovered = $0 }
+        .help(helpText)
+    }
+}
+
+private struct PresetChipButton: View {
+    let label: String
+    let scheme: ColorScheme
+    let inkPrimary: Color
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(inkPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(
+                            isHovered
+                                ? SpacedTheme.cardSurface(for: scheme)
+                                : SpacedTheme.chipSurface(for: scheme)
+                        )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .stroke(SpacedTheme.hairlineBorder(for: scheme), lineWidth: 0.9)
+                )
+        }
+        .buttonStyle(.plain)
+        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .onHover { isHovered = $0 }
     }
 }

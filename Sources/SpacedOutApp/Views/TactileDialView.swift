@@ -128,6 +128,7 @@ struct TactileDialView: View {
                 )
             }
             .buttonStyle(.plain)
+            .contentShape(Circle())
             .onHover { hovering in
                 isHoveringCenter = hovering
             }
@@ -140,9 +141,9 @@ struct TactileDialView: View {
                     let center = CGPoint(x: (dialDiameter + 26) / 2, y: (dialDiameter + 26) / 2)
                     let dx = value.location.x - center.x
                     let dy = value.location.y - center.y
-                    // Ignore drags inside the center button unless dragging outward
+                    // Ignore drags inside the 96pt center Start button
                     let distance = hypot(dx, dy)
-                    guard distance > 34 else { return }
+                    guard distance > 48 else { return }
 
                     var angle = atan2(dy, dx) + Double.pi / 2
                     if angle < 0 { angle += 2 * Double.pi }

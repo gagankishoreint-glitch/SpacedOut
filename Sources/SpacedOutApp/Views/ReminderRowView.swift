@@ -44,11 +44,12 @@ struct ReminderRowView: View {
                             Image(systemName: isPaused ? "play.fill" : "pause.fill")
                                 .font(.system(size: 9, weight: .bold))
                                 .foregroundStyle(ringColor)
-                                .opacity(isHovered || isPaused ? 1 : 0)
+                                .opacity(isHovered || isPaused ? 1 : 0.42)
                         }
                         .frame(width: 28, height: 28)
                     }
                     .buttonStyle(.plain)
+                    .contentShape(Circle())
                     .help(isPaused ? "Resume timer" : "Pause timer")
 
                     // Title + target wall-clock subtitle
@@ -147,16 +148,18 @@ struct ReminderRowView: View {
                                 )
                         }
                         .buttonStyle(.plain)
+                        .contentShape(Capsule())
                         .help("Mark complete now")
 
                         Button(action: onDelete) {
                             Image(systemName: "trash")
                                 .font(.system(size: 10.5, weight: .medium))
                                 .foregroundStyle(SpacedTheme.inkMuted(for: colorScheme))
-                                .padding(5)
+                                .frame(width: 24, height: 24)
                                 .background(Circle().fill(SpacedTheme.chipSurface(for: colorScheme)))
                         }
                         .buttonStyle(.plain)
+                        .contentShape(Circle())
                         .help("Cancel & remove timer")
                     }
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -219,5 +222,6 @@ private struct QuickAdjustPill: View {
                 )
         }
         .buttonStyle(.plain)
+        .contentShape(Capsule())
     }
 }
