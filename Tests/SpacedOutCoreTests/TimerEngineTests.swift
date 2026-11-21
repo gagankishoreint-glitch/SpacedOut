@@ -349,6 +349,7 @@ final class TimerEngineTests: XCTestCase {
 
         let activeAfter = engine.activeOrPausedReminders.first { $0.id == active.id }
         XCTAssertEqual(activeAfter?.targetDate.timeIntervalSince1970 ?? 0, originalTarget.timeIntervalSince1970, accuracy: 0.1)
+        XCTAssertFalse(engine.activityLog.contains { $0.reminderID == active.id && $0.kind == .externalSyncUpdated })
 
         let pausedAfter = engine.activeOrPausedReminders.first { $0.id == paused.id }
         XCTAssertEqual(pausedAfter?.status, .paused)

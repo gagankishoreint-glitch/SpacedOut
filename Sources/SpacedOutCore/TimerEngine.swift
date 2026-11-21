@@ -626,16 +626,18 @@ public final class TimerEngine {
             changeSource = "Apple Calendar"
         }
 
-        if let rDate = snapshot.reminderTargetDate,
-           abs(rDate.timeIntervalSince(item.targetDate)) > 2 {
-            applyExternalTargetDate(rDate, onto: &item, now: now)
-            changedFields.append("time -> \(item.formattedTargetDate(relativeTo: now))")
-            changeSource = "Apple Reminders"
-        } else if let cDate = snapshot.calendarTargetDate,
-                  abs(cDate.timeIntervalSince(item.targetDate)) > 2 {
-            applyExternalTargetDate(cDate, onto: &item, now: now)
-            changedFields.append("time -> \(item.formattedTargetDate(relativeTo: now))")
-            changeSource = "Apple Calendar"
+        if item.status != .paused {
+            if let rDate = snapshot.reminderTargetDate,
+               abs(rDate.timeIntervalSince(item.targetDate)) > 65 {
+                applyExternalTargetDate(rDate, onto: &item, now: now)
+                changedFields.append("time -> \(item.formattedTargetDate(relativeTo: now))")
+                changeSource = "Apple Reminders"
+            } else if let cDate = snapshot.calendarTargetDate,
+                      abs(cDate.timeIntervalSince(item.targetDate)) > 2 {
+                applyExternalTargetDate(cDate, onto: &item, now: now)
+                changedFields.append("time -> \(item.formattedTargetDate(relativeTo: now))")
+                changeSource = "Apple Calendar"
+            }
         }
 
         guard !changedFields.isEmpty else { return }
@@ -658,15 +660,13 @@ public final class TimerEngine {
     }
 
     private func applyExternalTargetDate(_ newDate: Date, onto item: inout ReminderItem, now: Date) {
+        guard item.status != .paused else { return }
         item.targetDate = newDate
         if newDate > now {
             let secs = max(10, min(Self.maxDurationSeconds, Int(newDate.timeIntervalSince(now).rounded())))
             item.durationSeconds = secs
             if item.status == .triggered {
                 item.status = .active
-            }
-            if item.status == .paused {
-                item.pausedRemainingSeconds = TimeInterval(secs)
             }
             if secs > settings.preAlertSeconds {
                 item.preAlertSent = false
