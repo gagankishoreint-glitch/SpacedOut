@@ -34,8 +34,15 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.spacedout.app
         PRODUCT_NAME: SpacedOut
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_KEY_CFBundleDisplayName: SpacedOut
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        ENABLE_HARDENED_RUNTIME: NO
         COMBINE_HIDPI_IMAGES: YES
     dependencies:
       - package: SpacedOutLocal
@@ -46,6 +53,11 @@ targets:
     platform: macOS
     sources:
       - path: Tests/SpacedOutCoreTests
+    settings:
+      base:
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
     dependencies:
       - package: SpacedOutLocal
         product: SpacedOutCore
