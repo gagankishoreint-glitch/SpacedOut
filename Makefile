@@ -11,7 +11,16 @@ app:
 	./scripts/build-app.sh release
 
 run: app
-	open dist/SpacedOut.app
+	@APP_PATH="$$(pwd -P)/dist/SpacedOut.app"; \
+	if ! open "$$APP_PATH"; then \
+	  LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"; \
+	  if [ -x "$$LSREGISTER" ]; then \
+	    "$$LSREGISTER" -u "$$APP_PATH" >/dev/null 2>&1 || true; \
+	    "$$LSREGISTER" -f "$$APP_PATH" >/dev/null 2>&1 || true; \
+	  fi; \
+	  sleep 0.3; \
+	  open "$$APP_PATH"; \
+	fi
 
 xcode:
 	@command -v xcodegen >/dev/null 2>&1 || { echo "Install XcodeGen first: brew install xcodegen"; exit 1; }

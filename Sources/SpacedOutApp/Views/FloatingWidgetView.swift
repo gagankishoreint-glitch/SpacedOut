@@ -2,7 +2,7 @@ import SpacedOutCore
 import SwiftUI
 
 private struct WidgetContentSizeKey: PreferenceKey {
-    static var defaultValue: CGSize = .zero
+    static let defaultValue: CGSize = .zero
     static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
         let next = nextValue()
         if next.width > 0 && next.height > 0 {

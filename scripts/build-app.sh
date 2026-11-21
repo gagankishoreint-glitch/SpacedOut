@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT_DIR"
+ROOT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+cd -P "$ROOT_DIR"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "Error: SpacedOut is a native macOS 14+ app and must be built on macOS." >&2
@@ -87,8 +87,23 @@ fi
 
 printf 'APPL????' > "$APP_BUNDLE/Contents/PkgInfo"
 
+xattr -cr "$APP_BUNDLE" >/dev/null 2>&1 || true
+
 echo "==> Ad-hoc code signing SpacedOut.app..."
 codesign --force --deep --sign - --entitlements "$ROOT_DIR/AppResources/SpacedOut.entitlements" "$APP_BUNDLE"
+
+if [[ ! -x "$APP_BUNDLE/Contents/MacOS/SpacedOut" ]]; then
+  echo "Error: Assembled app is missing executable at $APP_BUNDLE/Contents/MacOS/SpacedOut" >&2
+  exit 1
+fi
+
+codesign --verify --strict "$APP_BUNDLE"
+
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+if [[ -x "$LSREGISTER" ]]; then
+  "$LSREGISTER" -u "$APP_BUNDLE" >/dev/null 2>&1 || true
+  "$LSREGISTER" -f "$APP_BUNDLE" >/dev/null 2>&1 || true
+fi
 
 echo "==> Built: $APP_BUNDLE"
 echo "    Run with: open \"$APP_BUNDLE\""
