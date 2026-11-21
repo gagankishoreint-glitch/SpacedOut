@@ -24,10 +24,6 @@ Built with Swift, SwiftUI and AppKit.
 
 ## Screenshots
 
-<p align="center">
-  <img src="docs/images/app-icon.png" width="100" alt="SpacedOut app icon">
-</p>
-
 Floating widget
 
 <p align="center">
