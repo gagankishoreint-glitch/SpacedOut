@@ -377,4 +377,34 @@ final class TimerEngineTests: XCTestCase {
         let preserved = TimerEngine(clock: MutableTestClock(), store: v1CustomStore)
         XCTAssertEqual(preserved.settings.widgetOpacity, 0.85, accuracy: 0.001)
     }
+
+    func testRemoveAllActiveRemindersForQuitClearsLocalAndRespectsSyncFlag() async throws {
+        let clock = MutableTestClock()
+        let engine = TimerEngine(clock: clock, store: InMemoryStateStore())
+        let mockSync = MockSyncProvider()
+        engine.attachSyncProvider(mockSync)
+
+        _ = engine.createReminder(title: "One", durationSeconds: 300)
+        _ = engine.createReminder(title: "Two", durationSeconds: 600)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        engine.removeAllActiveRemindersForQuit(syncExternally: false)
+        try await Task.sleep(nanoseconds: 30_000_000)
+
+        XCTAssertTrue(engine.reminders.isEmpty)
+        XCTAssertFalse(engine.shouldArmWatchdog)
+        XCTAssertTrue(mockSync.deletedPairs.isEmpty)
+        XCTAssertEqual(engine.activityLog.filter { $0.kind == .deleted }.count, 2)
+
+        let third = engine.createReminder(title: "Three", durationSeconds: 300)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        engine.removeAllActiveRemindersForQuit()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertTrue(engine.reminders.isEmpty)
+        XCTAssertEqual(mockSync.deletedPairs.count, 1)
+        XCTAssertEqual(mockSync.deletedPairs.first?.reminderID, "ek-rem-\(third.id.uuidString)")
+        XCTAssertEqual(mockSync.deletedPairs.first?.calendarEventID, "ek-cal-\(third.id.uuidString)")
+    }
 }

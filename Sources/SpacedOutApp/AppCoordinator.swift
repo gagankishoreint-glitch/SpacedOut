@@ -38,6 +38,7 @@ final class AppCoordinator {
     private var tickCounter: Int = 0
     private var didStart = false
     private var confirmedTermination = false
+    private var didReplyToTermination = false
 
     init() {
         let engine = TimerEngine()
@@ -190,10 +191,12 @@ final class AppCoordinator {
     }
 
     func openHistoryWindow() {
+        statusBarController?.closePopover()
         utilityWindowManager?.showHistory()
     }
 
     func openSettingsWindow() {
+        statusBarController?.closePopover()
         utilityWindowManager?.showSettings()
     }
 
@@ -437,13 +440,56 @@ final class AppCoordinator {
             confirmedTermination = true
             return .terminateNow
         case .alertThirdButtonReturn:
-            engine.removeAllActiveRemindersForQuit()
+            let syncTargets: [SyncIdentifiers] = engine.isAnyAppleSyncEnabled
+                ? engine.reminders
+                    .filter { $0.status == .active || $0.status == .paused || $0.status == .triggered }
+                    .compactMap { item in
+                        guard item.externalReminderID != nil || item.externalCalendarEventID != nil else {
+                            return nil
+                        }
+                        return SyncIdentifiers(
+                            reminderID: item.externalReminderID,
+                            calendarEventID: item.externalCalendarEventID
+                        )
+                    }
+                : []
+            engine.removeAllActiveRemindersForQuit(syncExternally: false)
             watchdog.syncStateAndWait(armed: false)
             confirmedTermination = true
-            return .terminateNow
+
+            guard !syncTargets.isEmpty else {
+                return .terminateNow
+            }
+
+            Task { @MainActor [weak self] in
+                if let sync = self?.remindersSync {
+                    for target in syncTargets {
+                        await sync.syncDeleted(
+                            reminderID: target.reminderID,
+                            calendarEventID: target.calendarEventID
+                        )
+                    }
+                }
+                self?.finishDeferredTermination()
+            }
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                if let self {
+                    self.finishDeferredTermination()
+                } else {
+                    NSApp.reply(toApplicationShouldTerminate: true)
+                }
+            }
+            return .terminateLater
         default:
             return .terminateCancel
         }
+    }
+
+    private func finishDeferredTermination() {
+        guard !didReplyToTermination else { return }
+        didReplyToTermination = true
+        NSApp.reply(toApplicationShouldTerminate: true)
     }
 
     func exportICS() {

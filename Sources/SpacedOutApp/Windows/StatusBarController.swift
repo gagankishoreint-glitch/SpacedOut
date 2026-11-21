@@ -175,7 +175,7 @@ final class StatusBarController: NSObject {
 
         menu.addItem(.separator())
 
-        let historyItem = NSMenuItem(title: "Task History…", action: #selector(handleOpenHistory), keyEquivalent: "h")
+        let historyItem = NSMenuItem(title: "History & Activity…", action: #selector(handleOpenHistory), keyEquivalent: "y")
         historyItem.target = self
         menu.addItem(historyItem)
 

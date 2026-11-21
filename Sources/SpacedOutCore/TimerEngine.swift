@@ -384,7 +384,7 @@ public final class TimerEngine {
         }
     }
 
-    public func removeAllActiveRemindersForQuit() {
+    public func removeAllActiveRemindersForQuit(syncExternally: Bool = true) {
         let toRemove = reminders.filter { $0.status == .active || $0.status == .paused || $0.status == .triggered }
         guard !toRemove.isEmpty else { return }
         for item in toRemove {
@@ -394,7 +394,8 @@ public final class TimerEngine {
                 title: item.displayTitle,
                 details: "Removed before quitting app"
             )
-            if isAnyAppleSyncEnabled,
+            if syncExternally,
+               isAnyAppleSyncEnabled,
                (item.externalReminderID != nil || item.externalCalendarEventID != nil),
                let syncProvider {
                 Task { @MainActor in
