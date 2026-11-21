@@ -27,7 +27,7 @@ struct SettingsView: View {
                 }
         }
         .padding(18)
-        .frame(width: 600, height: 610)
+        .frame(minWidth: 600, maxWidth: .infinity, minHeight: 610, maxHeight: .infinity)
         .preferredColorScheme(SpacedTheme.colorScheme(for: coordinator.engine.settings.themeMode))
     }
 }

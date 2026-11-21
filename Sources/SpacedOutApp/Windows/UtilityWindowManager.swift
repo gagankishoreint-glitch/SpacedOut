@@ -44,12 +44,16 @@ final class UtilityWindowManager {
         window.title = "History & Activity"
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
+        window.isRestorable = false
         window.minSize = NSSize(width: 560, height: 440)
-        window.center()
-        window.contentView = NSHostingView(
+        let controller = NSHostingController(
             rootView: HistoryView()
                 .environment(coordinator)
         )
+        controller.sizingOptions = []
+        window.contentViewController = controller
+        window.setContentSize(NSSize(width: 700, height: 560))
+        window.center()
         historyWindow = window
         return window
     }
@@ -67,11 +71,15 @@ final class UtilityWindowManager {
         )
         window.title = "SpacedOut Settings"
         window.isReleasedWhenClosed = false
-        window.center()
-        window.contentView = NSHostingView(
+        window.isRestorable = false
+        let controller = NSHostingController(
             rootView: SettingsView()
                 .environment(coordinator)
         )
+        controller.sizingOptions = []
+        window.contentViewController = controller
+        window.setContentSize(NSSize(width: 600, height: 610))
+        window.center()
         settingsWindow = window
         return window
     }

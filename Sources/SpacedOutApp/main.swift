@@ -5,4 +5,6 @@ if CommandLine.arguments.contains("--watchdog-ensure") {
     exit(0)
 }
 
-SpacedOutApp.main()
+MainActor.assumeIsolated {
+    AppDelegate.runApp()
+}
