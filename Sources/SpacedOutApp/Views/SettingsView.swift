@@ -27,7 +27,7 @@ struct SettingsView: View {
                 }
         }
         .padding(18)
-        .frame(width: 570, height: 510)
+        .frame(width: 580, height: 545)
         .preferredColorScheme(SpacedTheme.colorScheme(for: coordinator.engine.settings.themeMode))
     }
 }

@@ -251,9 +251,9 @@ public enum WidgetScale: String, Codable, Sendable, CaseIterable, Identifiable {
 
     public var width: Double {
         switch self {
-        case .compact: return 300
-        case .regular: return 340
-        case .comfortable: return 388
+        case .compact: return 320
+        case .regular: return 360
+        case .comfortable: return 408
         }
     }
 }

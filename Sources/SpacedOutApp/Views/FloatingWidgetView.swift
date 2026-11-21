@@ -161,7 +161,7 @@ struct FloatingWidgetView: View {
         accent: Color,
         activeCount: Int
     ) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             HStack(spacing: 6) {
                 BrandLogoMark(
                     size: 16,
@@ -173,6 +173,8 @@ struct FloatingWidgetView: View {
                 Text("SpacedOut")
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(inkPrimary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
 
                 if activeCount > 0 {
                     Text("\(activeCount)")
@@ -182,10 +184,11 @@ struct FloatingWidgetView: View {
                         .padding(.horizontal, 6)
                         .padding(.vertical, 1.5)
                         .background(Capsule().fill(accent.opacity(0.14)))
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 4)
 
             HeaderIconButton(
                 systemName: coordinator.engine.settings.presentationSafeMode ? "eye.slash.fill" : "eye",
@@ -412,6 +415,8 @@ struct FloatingWidgetView: View {
                         .font(.system(size: 8.5, weight: .bold))
                 }
                 .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .foregroundStyle(accent)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 6)
@@ -547,7 +552,7 @@ private struct HeaderIconButton: View {
             Image(systemName: systemName)
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundStyle(tint)
-                .frame(width: 26, height: 26)
+                .frame(width: 24, height: 24)
                 .background(
                     Circle().fill(
                         isActive
@@ -576,6 +581,7 @@ private struct PresetChipButton: View {
             Text(label)
                 .font(.system(size: 11.5, weight: .semibold, design: .rounded))
                 .monospacedDigit()
+                .lineLimit(1)
                 .foregroundStyle(inkPrimary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)

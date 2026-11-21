@@ -21,6 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if Bundle.main.bundleURL.pathExtension != "app",
+           let icon = BrandLogo.dockAppIcon() {
+            NSApp.applicationIconImage = icon
+        }
         let coordinator = AppCoordinator()
         self.coordinator = coordinator
         coordinator.start()
