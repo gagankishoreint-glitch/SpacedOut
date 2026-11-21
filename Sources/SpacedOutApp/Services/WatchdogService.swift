@@ -123,10 +123,10 @@ final class WatchdogService {
         }
         guard kill(pid, 0) == 0 else { return false }
 
-        var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+        var buffer = [UInt8](repeating: 0, count: 4 * Int(MAXPATHLEN))
         let len = proc_pidpath(pid, &buffer, UInt32(buffer.count))
         guard len > 0 else { return false }
-        let path = String(cString: buffer)
+        let path = String(decoding: buffer.prefix(Int(len)), as: UTF8.self)
         return path.hasSuffix("/MacOS/SpacedOut")
     }
 

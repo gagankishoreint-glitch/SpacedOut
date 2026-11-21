@@ -175,7 +175,7 @@ final class AppleRemindersService: AppleSyncProviding {
     func syncCreated(_ reminder: ReminderItem) async -> SyncIdentifiers {
         var ids = SyncIdentifiers()
 
-        if remindersSyncEnabled && (await ensureRemindersAuthorized()) {
+        if remindersSyncEnabled, await ensureRemindersAuthorized() {
             if let calendar = resolveTargetReminderList() {
                 let ekReminder = EKReminder(eventStore: eventStore)
                 ekReminder.title = reminder.displayTitle
@@ -198,7 +198,7 @@ final class AppleRemindersService: AppleSyncProviding {
             }
         }
 
-        if calendarSyncEnabled && (await ensureCalendarAuthorized()) {
+        if calendarSyncEnabled, await ensureCalendarAuthorized() {
             if let cal = resolveTargetEventCalendar() {
                 let ekEvent = EKEvent(eventStore: eventStore)
                 ekEvent.title = reminder.displayTitle

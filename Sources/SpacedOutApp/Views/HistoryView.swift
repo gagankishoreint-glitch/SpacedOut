@@ -446,12 +446,6 @@ private struct ActivityLogEntryRow: View {
     let entry: ActivityLogEntry
     let scheme: ColorScheme
 
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss"
-        return f
-    }()
-
     var body: some View {
         let style = badgeStyle(for: entry.kind)
 
@@ -485,7 +479,7 @@ private struct ActivityLogEntryRow: View {
 
             Spacer(minLength: 8)
 
-            Text(Self.timeFormatter.string(from: entry.timestamp))
+            Text(entry.timestamp.formatted(date: .omitted, time: .standard))
                 .font(.system(size: 11, weight: .medium, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(SpacedTheme.inkMuted(for: scheme))
