@@ -34,10 +34,14 @@
     <string>Copyright © 2026 SpacedOut Contributors. MIT License.</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>SpacedOut syncs scheduled reminders to Apple Calendar so time-blocked tasks stay visible across your Mac, iPhone, and iPad.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>SpacedOut syncs scheduled reminders to Apple Calendar so time-blocked tasks stay visible across your Mac, iPhone, and iPad.</string>
     <key>NSRemindersFullAccessUsageDescription</key>
-    <string>SpacedOut optionally syncs quick reminders with Apple Reminders so alerts also reach your iPhone, iPad, or Apple Watch.</string>
+    <string>SpacedOut syncs quick reminders with Apple Reminders so alerts also reach your iPhone, iPad, or Apple Watch.</string>
     <key>NSRemindersUsageDescription</key>
-    <string>SpacedOut optionally syncs quick reminders with Apple Reminders so alerts also reach your iPhone, iPad, or Apple Watch.</string>
+    <string>SpacedOut syncs quick reminders with Apple Reminders so alerts also reach your iPhone, iPad, or Apple Watch.</string>
     <key>NSSupportsAutomaticTermination</key>
     <false/>
     <key>NSSupportsSuddenTermination</key>

@@ -99,4 +99,37 @@ final class QuickInputParserTests: XCTestCase {
             .clockTime(targetDate: makeDate(hour: 16, minute: 45), secondsFromNow: 7 * 3600 + 45 * 60)
         )
     }
+
+    func testParsesCalendarDateExpressions() {
+        // 2026-11-21 10:00 UTC is a Saturday
+        let now = makeDate(year: 2026, month: 11, day: 21, hour: 10, minute: 0)
+
+        let tomorrow = QuickInputParser.parse("dentist tomorrow 9am", now: now, calendar: fixedCalendar)
+        XCTAssertEqual(tomorrow.title, "dentist")
+        XCTAssertEqual(
+            tomorrow.target,
+            .clockTime(targetDate: makeDate(year: 2026, month: 11, day: 22, hour: 9, minute: 0), secondsFromNow: 23 * 3600)
+        )
+
+        let monthDay = QuickInputParser.parse("demo nov 25 at 2:30pm", now: now, calendar: fixedCalendar)
+        XCTAssertEqual(monthDay.title, "demo")
+        XCTAssertEqual(
+            monthDay.target,
+            .clockTime(targetDate: makeDate(year: 2026, month: 11, day: 25, hour: 14, minute: 30), secondsFromNow: 4 * 86400 + 4 * 3600 + 1800)
+        )
+
+        let weekday = QuickInputParser.parse("mon 8:15am sync", now: now, calendar: fixedCalendar)
+        XCTAssertEqual(weekday.title, "sync")
+        XCTAssertEqual(
+            weekday.target,
+            .clockTime(targetDate: makeDate(year: 2026, month: 11, day: 23, hour: 8, minute: 15), secondsFromNow: 2 * 86400 - 3600 - 2700)
+        )
+
+        let slashDate = QuickInputParser.parse("12/01 14:00 pay rent", now: now, calendar: fixedCalendar)
+        XCTAssertEqual(slashDate.title, "pay rent")
+        XCTAssertEqual(
+            slashDate.target,
+            .clockTime(targetDate: makeDate(year: 2026, month: 12, day: 1, hour: 14, minute: 0), secondsFromNow: 10 * 86400 + 4 * 3600)
+        )
+    }
 }

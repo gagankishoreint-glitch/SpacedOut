@@ -20,6 +20,7 @@ struct FloatingWidgetView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var inputText: String = ""
+    @State private var showCalendarPopover: Bool = false
     @FocusState private var isInputFocused: Bool
 
     private var effectiveColorScheme: ColorScheme {
@@ -219,7 +220,7 @@ struct FloatingWidgetView: View {
                 tint: inkMuted,
                 isActive: false,
                 scheme: scheme,
-                helpText: "Task History"
+                helpText: "Task History & Activity Log"
             ) {
                 coordinator.openHistoryWindow()
             }
@@ -318,9 +319,9 @@ struct FloatingWidgetView: View {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
 
         VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 TextField(
-                    "Remind me… e.g. tea 4m or call 4:30pm",
+                    "Remind me… tea 4m, tomorrow 9am",
                     text: $inputText
                 )
                 .textFieldStyle(.plain)
@@ -329,6 +330,45 @@ struct FloatingWidgetView: View {
                 .focused($isInputFocused)
                 .onSubmit {
                     submitQuickInput()
+                }
+
+                Button {
+                    coordinator.ensureActivePanelKey()
+                    showCalendarPopover = true
+                } label: {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(showCalendarPopover ? accent : inkMuted)
+                        .frame(width: 24, height: 24)
+                        .background(
+                            Circle().fill(
+                                showCalendarPopover
+                                    ? accent.opacity(0.14)
+                                    : SpacedTheme.chipSurface(for: scheme)
+                            )
+                        )
+                }
+                .buttonStyle(.plain)
+                .contentShape(Circle())
+                .help("Schedule on calendar")
+                .popover(isPresented: $showCalendarPopover, arrowEdge: .bottom) {
+                    CalendarSchedulePopover(
+                        initialTitle: trimmed,
+                        scheme: scheme,
+                        syncSummary: calendarSyncNote,
+                        onSchedule: { title, date, chosenAccent in
+                            coordinator.createCalendarReminder(
+                                title: title,
+                                targetDate: date,
+                                accent: chosenAccent
+                            )
+                            inputText = ""
+                            showCalendarPopover = false
+                        },
+                        onCancel: {
+                            showCalendarPopover = false
+                        }
+                    )
                 }
 
                 Button {
@@ -387,6 +427,15 @@ struct FloatingWidgetView: View {
         }
     }
 
+    private var calendarSyncNote: String {
+        let rem = coordinator.engine.settings.appleRemindersSyncEnabled
+        let cal = coordinator.engine.settings.appleCalendarSyncEnabled
+        if rem && cal { return "Syncs to Apple Reminders & Calendar" }
+        if rem { return "Syncs to Apple Reminders" }
+        if cal { return "Syncs to Apple Calendar" }
+        return "Local only (Apple sync off in Settings)"
+    }
+
     @ViewBuilder
     private func presetsRow(
         scheme: ColorScheme,
@@ -438,34 +487,40 @@ struct FloatingWidgetView: View {
         if list.count <= 3 {
             VStack(spacing: 7) {
                 ForEach(list) { item in
-                    ReminderRowView(
-                        item: item,
-                        onTogglePause: { coordinator.togglePause(id: item.id) },
-                        onAdjust: { delta in coordinator.adjustRemaining(id: item.id, deltaSeconds: delta) },
-                        onRename: { newTitle in coordinator.updateReminder(id: item.id, title: newTitle) },
-                        onComplete: { coordinator.resolveAlert(id: item.id, action: .complete) },
-                        onDelete: { coordinator.deleteReminder(id: item.id) }
-                    )
+                    rowView(for: item)
                 }
             }
         } else {
             ScrollView {
                 LazyVStack(spacing: 7) {
                     ForEach(list) { item in
-                        ReminderRowView(
-                            item: item,
-                            onTogglePause: { coordinator.togglePause(id: item.id) },
-                            onAdjust: { delta in coordinator.adjustRemaining(id: item.id, deltaSeconds: delta) },
-                            onRename: { newTitle in coordinator.updateReminder(id: item.id, title: newTitle) },
-                            onComplete: { coordinator.resolveAlert(id: item.id, action: .complete) },
-                            onDelete: { coordinator.deleteReminder(id: item.id) }
-                        )
+                        rowView(for: item)
                     }
                 }
             }
             .scrollIndicators(.hidden)
             .frame(height: 256)
         }
+    }
+
+    private func rowView(for item: ReminderItem) -> some View {
+        ReminderRowView(
+            item: item,
+            onTogglePause: { coordinator.togglePause(id: item.id) },
+            onAdjust: { delta in coordinator.adjustRemaining(id: item.id, deltaSeconds: delta) },
+            onEdit: { title, duration, targetDate, accent in
+                coordinator.updateReminder(
+                    id: item.id,
+                    title: title,
+                    durationSeconds: duration,
+                    targetDate: targetDate,
+                    accent: accent
+                )
+            },
+            onPreparePopover: { coordinator.ensureActivePanelKey() },
+            onComplete: { coordinator.resolveAlert(id: item.id, action: .complete) },
+            onDelete: { coordinator.deleteReminder(id: item.id) }
+        )
     }
 
     @ViewBuilder
@@ -530,6 +585,128 @@ struct FloatingWidgetView: View {
         let trimmed = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         coordinator.createDialReminder(title: trimmed)
         inputText = ""
+    }
+}
+
+private struct CalendarSchedulePopover: View {
+    let scheme: ColorScheme
+    let syncSummary: String
+    let onSchedule: (String, Date, AccentPreset) -> Void
+    let onCancel: () -> Void
+
+    @State private var title: String
+    @State private var targetDate: Date
+    @State private var selectedAccent: AccentPreset = .mint
+
+    init(
+        initialTitle: String,
+        scheme: ColorScheme,
+        syncSummary: String,
+        onSchedule: @escaping (String, Date, AccentPreset) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.scheme = scheme
+        self.syncSummary = syncSummary
+        self.onSchedule = onSchedule
+        self.onCancel = onCancel
+        _title = State(initialValue: initialTitle)
+        _targetDate = State(initialValue: Date().addingTimeInterval(3600))
+    }
+
+    var body: some View {
+        let accent = SpacedTheme.accent(selectedAccent, scheme: scheme)
+
+        VStack(alignment: .leading, spacing: 11) {
+            HStack {
+                Text("Schedule Reminder")
+                    .font(.system(size: 13.5, weight: .semibold))
+                Spacer()
+                Image(systemName: "calendar.badge.clock")
+                    .font(.system(size: 13))
+                    .foregroundStyle(accent)
+            }
+
+            TextField("Reminder title…", text: $title)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { scheduleNow() }
+
+            HStack(spacing: 6) {
+                Button("+1h") { targetDate = Date().addingTimeInterval(3600) }
+                Button("Tonight 8pm") { targetDate = nextOccurrence(hour: 20, minute: 0) }
+                Button("Tomorrow 9am") { targetDate = tomorrowOccurrence(hour: 9, minute: 0) }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+
+            DatePicker(
+                "Date",
+                selection: $targetDate,
+                in: Date()...,
+                displayedComponents: [.date]
+            )
+            .datePickerStyle(.graphical)
+
+            DatePicker(
+                "Time",
+                selection: $targetDate,
+                displayedComponents: [.hourAndMinute]
+            )
+            .font(.system(size: 12))
+
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 10))
+                    .foregroundStyle(accent)
+                Text(syncSummary)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.bordered)
+                    .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button("Schedule") {
+                    scheduleNow()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(14)
+        .frame(width: 292)
+    }
+
+    private func scheduleNow() {
+        let safeDate = max(Date().addingTimeInterval(15), targetDate)
+        onSchedule(title, safeDate, selectedAccent)
+    }
+
+    private func nextOccurrence(hour: Int, minute: Int) -> Date {
+        let cal = Calendar.current
+        let now = Date()
+        var comps = cal.dateComponents([.year, .month, .day], from: now)
+        comps.hour = hour
+        comps.minute = minute
+        comps.second = 0
+        if let candidate = cal.date(from: comps), candidate > now.addingTimeInterval(60) {
+            return candidate
+        }
+        return tomorrowOccurrence(hour: hour, minute: minute)
+    }
+
+    private func tomorrowOccurrence(hour: Int, minute: Int) -> Date {
+        let cal = Calendar.current
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: Date()) ?? Date()
+        var comps = cal.dateComponents([.year, .month, .day], from: tomorrow)
+        comps.hour = hour
+        comps.minute = minute
+        comps.second = 0
+        return cal.date(from: comps) ?? Date().addingTimeInterval(86400)
     }
 }
 

@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 
-@main
 struct SpacedOutApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
@@ -21,6 +20,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if let bundleID = Bundle.main.bundleIdentifier,
+           Bundle.main.bundleURL.pathExtension == "app" {
+            let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+                .filter { $0.processIdentifier != getpid() && !$0.isTerminated }
+            if let existing = others.first {
+                existing.activate()
+                NSApp.terminate(nil)
+                return
+            }
+        }
+
         if Bundle.main.bundleURL.pathExtension != "app",
            let icon = BrandLogo.dockAppIcon() {
             NSApp.applicationIconImage = icon

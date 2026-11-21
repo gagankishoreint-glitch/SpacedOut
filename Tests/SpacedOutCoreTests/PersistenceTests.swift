@@ -16,6 +16,8 @@ final class PersistenceTests: XCTestCase {
             durationSeconds: 1800,
             createdAt: now,
             targetDate: now.addingTimeInterval(1800),
+            externalReminderID: "rem-1",
+            externalCalendarEventID: "cal-1",
             accent: .sky
         )
         let entry = HistoryEntry(
@@ -27,6 +29,13 @@ final class PersistenceTests: XCTestCase {
             outcome: .completed,
             snoozeCount: 0
         )
+        let logEntry = ActivityLogEntry(
+            timestamp: now,
+            kind: .created,
+            reminderID: reminder.id,
+            reminderTitle: "Check laundry",
+            details: "Scheduled for 30m"
+        )
         var settings = AppSettings()
         settings.quickPresetsMinutes = [3, 7, 15, 30]
         settings.displayMode = .menuBarOnly
@@ -34,7 +43,9 @@ final class PersistenceTests: XCTestCase {
         let state = PersistedState(
             reminders: [reminder],
             history: [entry],
-            settings: settings
+            activityLog: [logEntry],
+            settings: settings,
+            lastSeenAt: now
         )
 
         try store.save(state)
@@ -46,6 +57,15 @@ final class PersistenceTests: XCTestCase {
         let partialJSON = """
         {
           "schemaVersion": 1,
+          "reminders": [
+            {
+              "id": "11111111-1111-1111-1111-111111111111",
+              "title": "Legacy timer",
+              "durationSeconds": 600,
+              "createdAt": "2026-11-21T10:00:00Z",
+              "targetDate": "2026-11-21T10:10:00Z"
+            }
+          ],
           "settings": {
             "themeMode": "dark"
           }
@@ -58,8 +78,13 @@ final class PersistenceTests: XCTestCase {
 
         XCTAssertEqual(decoded.settings.themeMode, .dark)
         XCTAssertEqual(decoded.settings.quickPresetsMinutes, [5, 10, 15, 25])
-        XCTAssertEqual(decoded.reminders, [])
+        XCTAssertTrue(decoded.settings.appleRemindersSyncEnabled)
+        XCTAssertTrue(decoded.settings.appleCalendarSyncEnabled)
+        XCTAssertEqual(decoded.reminders.count, 1)
+        XCTAssertEqual(decoded.reminders.first?.title, "Legacy timer")
+        XCTAssertNil(decoded.reminders.first?.externalCalendarEventID)
         XCTAssertEqual(decoded.history, [])
+        XCTAssertEqual(decoded.activityLog, [])
     }
 
     func testCorruptFileCreatesBackupAndThrows() throws {

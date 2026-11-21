@@ -16,15 +16,19 @@ final class MutableTestClock: ClockProviding, @unchecked Sendable {
 }
 
 @MainActor
-final class MockSyncProvider: RemindersSyncProviding {
+final class MockSyncProvider: AppleSyncProviding {
     var createdCount = 0
     var updatedCount = 0
     var completedCount = 0
-    var deletedIDs: [String] = []
+    var deletedPairs: [(reminderID: String?, calendarEventID: String?)] = []
+    var snapshotsByID: [UUID: ExternalSyncSnapshot] = [:]
 
-    func syncCreated(_ reminder: ReminderItem) async -> String? {
+    func syncCreated(_ reminder: ReminderItem) async -> SyncIdentifiers {
         createdCount += 1
-        return "ek-\(reminder.id.uuidString)"
+        return SyncIdentifiers(
+            reminderID: "ek-rem-\(reminder.id.uuidString)",
+            calendarEventID: "ek-cal-\(reminder.id.uuidString)"
+        )
     }
 
     func syncUpdated(_ reminder: ReminderItem) async {
@@ -35,8 +39,12 @@ final class MockSyncProvider: RemindersSyncProviding {
         completedCount += 1
     }
 
-    func syncDeleted(externalID: String) async {
-        deletedIDs.append(externalID)
+    func syncDeleted(reminderID: String?, calendarEventID: String?) async {
+        deletedPairs.append((reminderID, calendarEventID))
+    }
+
+    func fetchExternalSnapshot(for reminder: ReminderItem) async -> ExternalSyncSnapshot? {
+        snapshotsByID[reminder.id]
     }
 }
 
@@ -85,17 +93,25 @@ final class TimerEngineTests: XCTestCase {
         XCTAssertEqual(engine.evaluateDueReminders().count, 1)
     }
 
-    func testEditAndAdjustActiveReminder() {
+    func testEditTitleDurationAndMultiDayCalendarTargetDate() {
         let clock = MutableTestClock()
         let engine = TimerEngine(clock: clock, store: InMemoryStateStore())
 
         let item = engine.createReminder(title: "Old label", durationSeconds: 300)
-        engine.updateReminder(id: item.id, title: "Updated label")
-        engine.adjustRemaining(id: item.id, deltaSeconds: 120)
+        let threeDaysLater = clock.now.addingTimeInterval(3 * 86400)
+        engine.updateReminder(
+            id: item.id,
+            title: "Flight check-in",
+            targetDate: threeDaysLater,
+            accent: .sky
+        )
 
         let updated = engine.activeOrPausedReminders.first
-        XCTAssertEqual(updated?.title, "Updated label")
-        XCTAssertEqual(updated?.remainingSeconds(at: clock.now) ?? 0, 420, accuracy: 0.01)
+        XCTAssertEqual(updated?.title, "Flight check-in")
+        XCTAssertEqual(updated?.accent, .sky)
+        XCTAssertEqual(updated?.targetDate.timeIntervalSince1970 ?? 0, threeDaysLater.timeIntervalSince1970, accuracy: 0.5)
+        XCTAssertEqual(updated?.durationSeconds, 3 * 86400)
+        XCTAssertTrue(engine.activityLog.contains { $0.kind == .edited && $0.reminderTitle == "Flight check-in" })
     }
 
     func testPreAlertFiresOnceBeforeFullScreenTrigger() {
@@ -163,11 +179,16 @@ final class TimerEngineTests: XCTestCase {
         let engine = TimerEngine(clock: clock, store: InMemoryStateStore())
         let mockSync = MockSyncProvider()
         engine.attachSyncProvider(mockSync)
-        engine.updateSettings { $0.appleRemindersSyncEnabled = true }
+        engine.updateSettings {
+            $0.appleRemindersSyncEnabled = true
+            $0.appleCalendarSyncEnabled = true
+        }
 
         let item = engine.createReminder(title: "Sync me", durationSeconds: 120)
         try await Task.sleep(nanoseconds: 30_000_000)
         XCTAssertEqual(mockSync.createdCount, 1)
+        XCTAssertEqual(engine.activeOrPausedReminders.first?.externalReminderID, "ek-rem-\(item.id.uuidString)")
+        XCTAssertEqual(engine.activeOrPausedReminders.first?.externalCalendarEventID, "ek-cal-\(item.id.uuidString)")
 
         engine.updateReminder(id: item.id, title: "Sync me updated")
         try await Task.sleep(nanoseconds: 30_000_000)
@@ -176,5 +197,101 @@ final class TimerEngineTests: XCTestCase {
         engine.completeReminder(id: item.id)
         try await Task.sleep(nanoseconds: 30_000_000)
         XCTAssertEqual(mockSync.completedCount, 1)
+    }
+
+    func testRestartRecoveryArmsMissedTimersAndLogsOfflineGap() {
+        let clock = MutableTestClock()
+        let store = InMemoryStateStore()
+
+        let firstEngine = TimerEngine(clock: clock, store: store)
+        let overdueWhileOff = firstEngine.createReminder(title: "Take medicine", durationSeconds: 300)
+        let stillFuture = firstEngine.createReminder(title: "Evening call", durationSeconds: 7200)
+
+        // simulate Mac shutdown/restart 1 hour later
+        clock.advance(by: 3600)
+        let rebootedEngine = TimerEngine(clock: clock, store: store)
+
+        XCTAssertEqual(rebootedEngine.triggeredQueue.map(\.id), [overdueWhileOff.id])
+        XCTAssertEqual(rebootedEngine.activeOrPausedReminders.map(\.id), [stillFuture.id])
+        XCTAssertEqual(rebootedEngine.activeOrPausedReminders.first?.remainingSeconds(at: clock.now) ?? 0, 3600, accuracy: 0.5)
+
+        let recoveryEvents = rebootedEngine.activityLog.filter { $0.kind == .recoveredAfterRestart }
+        XCTAssertEqual(recoveryEvents.count, 2)
+    }
+
+    func testTwoWayExternalSyncUpdateCompletionAndDeletion() async throws {
+        let clock = MutableTestClock()
+        let engine = TimerEngine(clock: clock, store: InMemoryStateStore())
+        let mockSync = MockSyncProvider()
+        engine.attachSyncProvider(mockSync)
+
+        let first = engine.createReminder(title: "Dentist", durationSeconds: 3600)
+        let second = engine.createReminder(title: "Water plants", durationSeconds: 1800)
+        let third = engine.createReminder(title: "Standup", durationSeconds: 2400)
+        try await Task.sleep(nanoseconds: 30_000_000)
+
+        // 1. edited in Apple Calendar
+        let shiftedDate = clock.now.addingTimeInterval(5400)
+        mockSync.snapshotsByID[first.id] = ExternalSyncSnapshot(
+            reminderExists: true,
+            reminderCompleted: false,
+            reminderTitle: "Dentist",
+            reminderTargetDate: first.targetDate,
+            calendarEventExists: true,
+            calendarTitle: "Dentist Visit",
+            calendarTargetDate: shiftedDate
+        )
+        // 2. completed in Apple Reminders
+        mockSync.snapshotsByID[second.id] = ExternalSyncSnapshot(
+            reminderExists: true,
+            reminderCompleted: true,
+            reminderTitle: "Water plants",
+            reminderTargetDate: second.targetDate,
+            calendarEventExists: true,
+            calendarTitle: "Water plants",
+            calendarTargetDate: second.targetDate
+        )
+        // 3. deleted externally in Apple Calendar -> should delete surviving Apple Reminder too
+        mockSync.snapshotsByID[third.id] = ExternalSyncSnapshot(
+            reminderExists: true,
+            reminderCompleted: false,
+            reminderTitle: "Standup",
+            reminderTargetDate: third.targetDate,
+            calendarEventExists: false
+        )
+
+        await engine.reconcileAllFromSyncProvider()
+        try await Task.sleep(nanoseconds: 30_000_000)
+
+        let updatedFirst = engine.activeOrPausedReminders.first { $0.id == first.id }
+        XCTAssertEqual(updatedFirst?.title, "Dentist Visit")
+        XCTAssertEqual(updatedFirst?.targetDate.timeIntervalSince1970 ?? 0, shiftedDate.timeIntervalSince1970, accuracy: 0.5)
+
+        XCTAssertFalse(engine.reminders.contains { $0.id == second.id })
+        XCTAssertEqual(engine.history.first?.title, "Water plants")
+        XCTAssertEqual(engine.history.first?.outcome, .completed)
+
+        XCTAssertFalse(engine.reminders.contains { $0.id == third.id })
+        XCTAssertTrue(mockSync.deletedPairs.contains { $0.reminderID == "ek-rem-\(third.id.uuidString)" && $0.calendarEventID == nil })
+        XCTAssertTrue(engine.activityLog.contains { $0.kind == .externalSyncUpdated })
+        XCTAssertTrue(engine.activityLog.contains { $0.kind == .externalSyncDeleted })
+    }
+
+    func testWatchdogArmedStateReflectsActiveTimersAndSetting() {
+        let clock = MutableTestClock()
+        let engine = TimerEngine(clock: clock, store: InMemoryStateStore())
+        XCTAssertFalse(engine.shouldArmWatchdog)
+
+        let item = engine.createReminder(title: "Focus block", durationSeconds: 600)
+        XCTAssertTrue(engine.shouldArmWatchdog)
+
+        engine.updateSettings { $0.accountabilityWatchdogEnabled = false }
+        XCTAssertFalse(engine.shouldArmWatchdog)
+
+        engine.updateSettings { $0.accountabilityWatchdogEnabled = true }
+        XCTAssertTrue(engine.shouldArmWatchdog)
+
+        engine.deleteReminder(id: item.id)
+        XCTAssertFalse(engine.shouldArmWatchdog)
     }
 }

@@ -27,7 +27,7 @@ struct SettingsView: View {
                 }
         }
         .padding(18)
-        .frame(width: 580, height: 545)
+        .frame(width: 590, height: 585)
         .preferredColorScheme(SpacedTheme.colorScheme(for: coordinator.engine.settings.themeMode))
     }
 }
@@ -295,11 +295,12 @@ private struct RemindersDataSettingsTab: View {
     @Environment(AppCoordinator.self) private var coordinator
     @State private var showResetConfirmation = false
     @State private var listNameDraft = ""
+    @State private var calendarNameDraft = ""
 
     var body: some View {
         Form {
             Section("Apple Reminders Sync") {
-                Toggle("Sync New Reminders with Apple Reminders", isOn: Binding(
+                Toggle("Sync Timers with Apple Reminders", isOn: Binding(
                     get: { coordinator.engine.settings.appleRemindersSyncEnabled },
                     set: { enabled in
                         Task { @MainActor in
@@ -308,7 +309,7 @@ private struct RemindersDataSettingsTab: View {
                     }
                 ))
 
-                LabeledContent("Permission Status") {
+                LabeledContent("Reminders Permission") {
                     Text(coordinator.remindersSync.authState.label)
                         .foregroundStyle(
                             coordinator.remindersSync.authState == .authorized ? .green : .secondary
@@ -326,7 +327,7 @@ private struct RemindersDataSettingsTab: View {
                     }
                 } else if coordinator.remindersSync.authState == .denied || coordinator.remindersSync.authState == .writeOnly {
                     LabeledContent("Authorization") {
-                        Button("Open Privacy Settings…") {
+                        Button("Open Reminders Privacy…") {
                             coordinator.remindersSync.openSystemRemindersPrivacy()
                         }
                         .buttonStyle(.bordered)
@@ -345,11 +346,83 @@ private struct RemindersDataSettingsTab: View {
                             .controlSize(.small)
                     }
                 }
+            }
+
+            Section("Apple Calendar Sync") {
+                Toggle("Sync Scheduled Timers with Apple Calendar", isOn: Binding(
+                    get: { coordinator.engine.settings.appleCalendarSyncEnabled },
+                    set: { enabled in
+                        Task { @MainActor in
+                            await coordinator.updateAppleCalendarEnabled(enabled)
+                        }
+                    }
+                ))
+
+                LabeledContent("Calendar Permission") {
+                    Text(coordinator.remindersSync.calendarAuthState.label)
+                        .foregroundStyle(
+                            coordinator.remindersSync.calendarAuthState == .authorized ? .green : .secondary
+                        )
+                }
+
+                if coordinator.remindersSync.calendarAuthState == .notDetermined {
+                    LabeledContent("Authorization") {
+                        Button("Request Calendar Access") {
+                            Task { @MainActor in
+                                _ = await coordinator.remindersSync.requestCalendarAccess()
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                } else if coordinator.remindersSync.calendarAuthState == .denied || coordinator.remindersSync.calendarAuthState == .writeOnly {
+                    LabeledContent("Authorization") {
+                        Button("Open Calendar Privacy…") {
+                            coordinator.remindersSync.openSystemCalendarPrivacy()
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+
+                LabeledContent("Target Calendar Name") {
+                    HStack(spacing: 8) {
+                        TextField("", text: $calendarNameDraft, prompt: Text("SpacedOut"))
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 155)
+                            .onSubmit { applyCalendarName() }
+                        Button("Save") { applyCalendarName() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
+                }
+
+                LabeledContent("Two-Way Reconciliation") {
+                    Button("Sync Changes Now") {
+                        Task { @MainActor in
+                            await coordinator.reconcileAppleSyncNow()
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
 
                 if let syncError = coordinator.remindersSync.lastSyncError {
                     Text(syncError)
                         .font(.caption)
                         .foregroundStyle(.red)
+                }
+            }
+
+            Section("Accountability & Restart Recovery") {
+                Toggle("Keep Active Timers Alive Across Crashes & Restarts", isOn: Binding(
+                    get: { coordinator.engine.settings.accountabilityWatchdogEnabled },
+                    set: { enabled in
+                        coordinator.engine.updateSettings { $0.accountabilityWatchdogEnabled = enabled }
+                    }
+                ))
+
+                LabeledContent("Watchdog Status") {
+                    Text(watchdogStatusLabel)
+                        .foregroundStyle(coordinator.engine.shouldArmWatchdog ? .green : .secondary)
                 }
             }
 
@@ -359,6 +432,14 @@ private struct RemindersDataSettingsTab: View {
                         coordinator.exportICS()
                     }
                     .buttonStyle(.bordered)
+                }
+
+                LabeledContent("User Activity Log (.txt)") {
+                    Button("Export Activity Log…") {
+                        coordinator.exportActivityLog()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(coordinator.engine.activityLog.isEmpty)
                 }
 
                 LabeledContent("Reset Local App Data") {
@@ -372,6 +453,7 @@ private struct RemindersDataSettingsTab: View {
         .formStyle(.grouped)
         .onAppear {
             listNameDraft = coordinator.engine.settings.appleRemindersListName
+            calendarNameDraft = coordinator.engine.settings.appleCalendarName
         }
         .confirmationDialog(
             "Reset all SpacedOut timers, history, and settings?",
@@ -381,10 +463,21 @@ private struct RemindersDataSettingsTab: View {
             Button("Reset Everything", role: .destructive) {
                 coordinator.engine.resetAllData()
                 listNameDraft = coordinator.engine.settings.appleRemindersListName
+                calendarNameDraft = coordinator.engine.settings.appleCalendarName
                 coordinator.applyDisplayMode(coordinator.engine.settings.displayMode)
             }
             Button("Cancel", role: .cancel) {}
         }
+    }
+
+    private var watchdogStatusLabel: String {
+        if !coordinator.watchdog.isSupportedInCurrentBundle {
+            return "Requires .app Bundle (make run)"
+        }
+        if !coordinator.engine.settings.accountabilityWatchdogEnabled {
+            return "Disabled"
+        }
+        return coordinator.engine.shouldArmWatchdog ? "Armed (Active Timers)" : "Standby (No Active Timers)"
     }
 
     @MainActor
@@ -393,5 +486,13 @@ private struct RemindersDataSettingsTab: View {
         let resolved = trimmed.isEmpty ? "SpacedOut" : trimmed
         listNameDraft = resolved
         coordinator.engine.updateSettings { $0.appleRemindersListName = resolved }
+    }
+
+    @MainActor
+    private func applyCalendarName() {
+        let trimmed = calendarNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolved = trimmed.isEmpty ? "SpacedOut" : trimmed
+        calendarNameDraft = resolved
+        coordinator.engine.updateSettings { $0.appleCalendarName = resolved }
     }
 }

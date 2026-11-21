@@ -10,34 +10,81 @@ public struct SystemClock: ClockProviding {
     public var now: Date { Date() }
 }
 
+public struct SyncIdentifiers: Equatable, Sendable {
+    public var reminderID: String?
+    public var calendarEventID: String?
+
+    public init(reminderID: String? = nil, calendarEventID: String? = nil) {
+        self.reminderID = reminderID
+        self.calendarEventID = calendarEventID
+    }
+}
+
+public struct ExternalSyncSnapshot: Equatable, Sendable {
+    public var reminderExists: Bool?
+    public var reminderCompleted: Bool
+    public var reminderTitle: String?
+    public var reminderTargetDate: Date?
+    public var calendarEventExists: Bool?
+    public var calendarTitle: String?
+    public var calendarTargetDate: Date?
+
+    public init(
+        reminderExists: Bool? = nil,
+        reminderCompleted: Bool = false,
+        reminderTitle: String? = nil,
+        reminderTargetDate: Date? = nil,
+        calendarEventExists: Bool? = nil,
+        calendarTitle: String? = nil,
+        calendarTargetDate: Date? = nil
+    ) {
+        self.reminderExists = reminderExists
+        self.reminderCompleted = reminderCompleted
+        self.reminderTitle = reminderTitle
+        self.reminderTargetDate = reminderTargetDate
+        self.calendarEventExists = calendarEventExists
+        self.calendarTitle = calendarTitle
+        self.calendarTargetDate = calendarTargetDate
+    }
+}
+
 @MainActor
-public protocol RemindersSyncProviding: AnyObject {
-    func syncCreated(_ reminder: ReminderItem) async -> String?
+public protocol AppleSyncProviding: AnyObject {
+    func syncCreated(_ reminder: ReminderItem) async -> SyncIdentifiers
     func syncUpdated(_ reminder: ReminderItem) async
     func syncCompleted(_ reminder: ReminderItem) async
-    func syncDeleted(externalID: String) async
+    func syncDeleted(reminderID: String?, calendarEventID: String?) async
+    func fetchExternalSnapshot(for reminder: ReminderItem) async -> ExternalSyncSnapshot?
 }
+
+public typealias RemindersSyncProviding = AppleSyncProviding
 
 @MainActor
 @Observable
 public final class TimerEngine {
     public private(set) var reminders: [ReminderItem] = []
     public private(set) var history: [HistoryEntry] = []
+    public private(set) var activityLog: [ActivityLogEntry] = []
     public private(set) var settings: AppSettings = AppSettings()
     public private(set) var lastPersistenceError: String?
 
     private let clock: ClockProviding
     private let store: StatePersisting
-    private weak var syncProvider: RemindersSyncProviding?
+    private weak var syncProvider: AppleSyncProviding?
+    private var lastSeenAt: Date?
 
     public var onPreAlert: ((ReminderItem) -> Void)?
     public var onTriggered: (([ReminderItem]) -> Void)?
     public var onSettingsChanged: ((AppSettings) -> Void)?
+    public var onRemindersChanged: (() -> Void)?
+
+    private static let maxDurationSeconds = 365 * 86400
+    private static let maxActivityLogEntries = 1500
 
     public init(
         clock: ClockProviding = SystemClock(),
         store: StatePersisting = AtomicJSONStore(),
-        syncProvider: RemindersSyncProviding? = nil
+        syncProvider: AppleSyncProviding? = nil
     ) {
         self.clock = clock
         self.store = store
@@ -45,8 +92,17 @@ public final class TimerEngine {
         loadInitialState()
     }
 
-    public func attachSyncProvider(_ provider: RemindersSyncProviding?) {
+    public func attachSyncProvider(_ provider: AppleSyncProviding?) {
         self.syncProvider = provider
+    }
+
+    public var isAnyAppleSyncEnabled: Bool {
+        settings.appleRemindersSyncEnabled || settings.appleCalendarSyncEnabled
+    }
+
+    public var shouldArmWatchdog: Bool {
+        settings.accountabilityWatchdogEnabled
+            && (!activeOrPausedReminders.isEmpty || !triggeredQueue.isEmpty)
     }
 
     public var activeOrPausedReminders: [ReminderItem] {
@@ -109,12 +165,20 @@ public final class TimerEngine {
         accent: AccentPreset = .mint
     ) -> ReminderItem {
         let now = clock.now
-        let clampedDuration = max(5, min(24 * 3600, durationSeconds))
-        let resolvedTarget = targetDate ?? now.addingTimeInterval(TimeInterval(clampedDuration))
+        let resolvedTarget: Date
+        let resolvedDuration: Int
+        if let targetDate {
+            let delta = Int(targetDate.timeIntervalSince(now).rounded())
+            resolvedDuration = max(5, min(Self.maxDurationSeconds, delta))
+            resolvedTarget = max(now.addingTimeInterval(5), targetDate)
+        } else {
+            resolvedDuration = max(5, min(Self.maxDurationSeconds, durationSeconds))
+            resolvedTarget = now.addingTimeInterval(TimeInterval(resolvedDuration))
+        }
 
         let item = ReminderItem(
             title: title,
-            durationSeconds: clampedDuration,
+            durationSeconds: resolvedDuration,
             createdAt: now,
             startedAt: now,
             targetDate: resolvedTarget,
@@ -123,43 +187,94 @@ public final class TimerEngine {
         )
 
         reminders.append(item)
+        appendLog(
+            kind: .created,
+            reminderID: item.id,
+            title: item.displayTitle,
+            details: "Scheduled for \(item.formattedTargetDate(relativeTo: now)) (\(ReminderItem.formatDuration(resolvedDuration)))"
+        )
         persistState()
+        onRemindersChanged?()
 
-        if settings.appleRemindersSyncEnabled, let syncProvider {
+        if isAnyAppleSyncEnabled, let syncProvider {
             let itemID = item.id
             Task { @MainActor [weak self] in
-                guard let extID = await syncProvider.syncCreated(item) else { return }
-                self?.setExternalReminderID(extID, for: itemID)
+                let ids = await syncProvider.syncCreated(item)
+                self?.setExternalSyncIDs(ids, for: itemID)
             }
         }
         return item
     }
 
-    public func updateReminder(id: UUID, title: String? = nil, durationSeconds: Int? = nil) {
+    public func updateReminder(
+        id: UUID,
+        title: String? = nil,
+        durationSeconds: Int? = nil,
+        targetDate: Date? = nil,
+        accent: AccentPreset? = nil
+    ) {
         guard let idx = reminders.firstIndex(where: { $0.id == id }) else { return }
         var item = reminders[idx]
         let now = clock.now
+        var changeNotes: [String] = []
 
         if let title {
-            item.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        if let durationSeconds {
-            let clamped = max(10, min(24 * 3600, durationSeconds))
-            item.durationSeconds = clamped
-            if item.status == .paused {
-                item.pausedRemainingSeconds = TimeInterval(clamped)
-            } else if item.status == .active {
-                item.startedAt = now
-                item.targetDate = now.addingTimeInterval(TimeInterval(clamped))
-                item.preAlertSent = false
+            let cleaned = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if cleaned != item.title {
+                let oldDisplay = item.displayTitle
+                item.title = cleaned
+                changeNotes.append("title '\(oldDisplay)' -> '\(item.displayTitle)'")
             }
         }
 
-        reminders[idx] = item
-        persistState()
+        if let targetDate {
+            let clampedTarget = max(now.addingTimeInterval(10), targetDate)
+            let newDuration = max(10, min(Self.maxDurationSeconds, Int(clampedTarget.timeIntervalSince(now).rounded())))
+            item.durationSeconds = newDuration
+            item.targetDate = clampedTarget
+            item.startedAt = now
+            if item.status == .paused {
+                item.pausedRemainingSeconds = TimeInterval(newDuration)
+            } else if item.status == .triggered {
+                item.status = .active
+            }
+            if newDuration > settings.preAlertSeconds {
+                item.preAlertSent = false
+            }
+            changeNotes.append("scheduled for \(item.formattedTargetDate(relativeTo: now))")
+        } else if let durationSeconds {
+            let clamped = max(10, min(Self.maxDurationSeconds, durationSeconds))
+            item.durationSeconds = clamped
+            if item.status == .paused {
+                item.pausedRemainingSeconds = TimeInterval(clamped)
+            } else if item.status == .active || item.status == .triggered {
+                item.status = .active
+                item.startedAt = now
+                item.targetDate = now.addingTimeInterval(TimeInterval(clamped))
+                if clamped > settings.preAlertSeconds {
+                    item.preAlertSent = false
+                }
+            }
+            changeNotes.append("duration -> \(ReminderItem.formatDuration(clamped))")
+        }
 
-        if settings.appleRemindersSyncEnabled, let syncProvider {
+        if let accent, accent != item.accent {
+            item.accent = accent
+        }
+
+        reminders[idx] = item
+        if !changeNotes.isEmpty {
+            appendLog(
+                kind: .edited,
+                reminderID: item.id,
+                title: item.displayTitle,
+                details: changeNotes.joined(separator: "; ")
+            )
+        }
+        persistState()
+        onRemindersChanged?()
+
+        if isAnyAppleSyncEnabled, let syncProvider {
             Task { @MainActor in
                 await syncProvider.syncUpdated(item)
             }
@@ -174,7 +289,7 @@ public final class TimerEngine {
         switch item.status {
         case .active:
             let currentRem = item.remainingSeconds(at: now)
-            let nextRem = max(10, min(24 * 3600, currentRem + TimeInterval(deltaSeconds)))
+            let nextRem = max(10, min(TimeInterval(Self.maxDurationSeconds), currentRem + TimeInterval(deltaSeconds)))
             item.targetDate = now.addingTimeInterval(nextRem)
             if Int(nextRem.rounded()) > item.durationSeconds {
                 item.durationSeconds = Int(nextRem.rounded())
@@ -184,7 +299,7 @@ public final class TimerEngine {
             }
         case .paused:
             let currentRem = item.pausedRemainingSeconds ?? TimeInterval(item.durationSeconds)
-            let nextRem = max(10, min(24 * 3600, currentRem + TimeInterval(deltaSeconds)))
+            let nextRem = max(10, min(TimeInterval(Self.maxDurationSeconds), currentRem + TimeInterval(deltaSeconds)))
             item.pausedRemainingSeconds = nextRem
             if Int(nextRem.rounded()) > item.durationSeconds {
                 item.durationSeconds = Int(nextRem.rounded())
@@ -194,9 +309,16 @@ public final class TimerEngine {
         }
 
         reminders[idx] = item
+        let sign = deltaSeconds >= 0 ? "+" : "-"
+        appendLog(
+            kind: .adjusted,
+            reminderID: item.id,
+            title: item.displayTitle,
+            details: "\(sign)\(ReminderItem.formatDuration(abs(deltaSeconds))) (ends \(item.formattedTargetDate(relativeTo: now)))"
+        )
         persistState()
 
-        if settings.appleRemindersSyncEnabled, let syncProvider {
+        if isAnyAppleSyncEnabled, let syncProvider {
             Task { @MainActor in
                 await syncProvider.syncUpdated(item)
             }
@@ -207,24 +329,31 @@ public final class TimerEngine {
         guard let idx = reminders.firstIndex(where: { $0.id == id }) else { return }
         var item = reminders[idx]
         let now = clock.now
+        let logKind: ActivityEventKind
+        let detail: String
 
         if item.status == .active {
             let rem = max(1, item.targetDate.timeIntervalSince(now))
             item.pausedRemainingSeconds = rem
             item.status = .paused
+            logKind = .paused
+            detail = "Paused with \(ReminderItem.formatDuration(Int(rem.rounded()))) remaining"
         } else if item.status == .paused {
             let rem = max(1, item.pausedRemainingSeconds ?? TimeInterval(item.durationSeconds))
             item.targetDate = now.addingTimeInterval(rem)
             item.pausedRemainingSeconds = nil
             item.status = .active
+            logKind = .resumed
+            detail = "Resumed; ends \(item.formattedTargetDate(relativeTo: now))"
         } else {
             return
         }
 
         reminders[idx] = item
+        appendLog(kind: logKind, reminderID: item.id, title: item.displayTitle, details: detail)
         persistState()
 
-        if settings.appleRemindersSyncEnabled, let syncProvider {
+        if isAnyAppleSyncEnabled, let syncProvider {
             Task { @MainActor in
                 await syncProvider.syncUpdated(item)
             }
@@ -234,15 +363,51 @@ public final class TimerEngine {
     public func deleteReminder(id: UUID) {
         guard let idx = reminders.firstIndex(where: { $0.id == id }) else { return }
         let removed = reminders.remove(at: idx)
+        appendLog(
+            kind: .deleted,
+            reminderID: removed.id,
+            title: removed.displayTitle,
+            details: "Removed active reminder"
+        )
         persistState()
+        onRemindersChanged?()
 
-        if settings.appleRemindersSyncEnabled,
-           let extID = removed.externalReminderID,
+        if isAnyAppleSyncEnabled,
+           (removed.externalReminderID != nil || removed.externalCalendarEventID != nil),
            let syncProvider {
             Task { @MainActor in
-                await syncProvider.syncDeleted(externalID: extID)
+                await syncProvider.syncDeleted(
+                    reminderID: removed.externalReminderID,
+                    calendarEventID: removed.externalCalendarEventID
+                )
             }
         }
+    }
+
+    public func removeAllActiveRemindersForQuit() {
+        let toRemove = reminders.filter { $0.status == .active || $0.status == .paused || $0.status == .triggered }
+        guard !toRemove.isEmpty else { return }
+        for item in toRemove {
+            appendLog(
+                kind: .deleted,
+                reminderID: item.id,
+                title: item.displayTitle,
+                details: "Removed before quitting app"
+            )
+            if isAnyAppleSyncEnabled,
+               (item.externalReminderID != nil || item.externalCalendarEventID != nil),
+               let syncProvider {
+                Task { @MainActor in
+                    await syncProvider.syncDeleted(
+                        reminderID: item.externalReminderID,
+                        calendarEventID: item.externalCalendarEventID
+                    )
+                }
+            }
+        }
+        reminders.removeAll()
+        persistState()
+        onRemindersChanged?()
     }
 
     @discardableResult
@@ -259,6 +424,12 @@ public final class TimerEngine {
             if remaining <= 0 {
                 reminders[idx].status = .triggered
                 newlyTriggered.append(reminders[idx])
+                appendLog(
+                    kind: .triggered,
+                    reminderID: reminders[idx].id,
+                    title: reminders[idx].displayTitle,
+                    details: "Due time reached"
+                )
                 didMutate = true
             } else if settings.notificationStyle == .fullScreenWithPreAlert,
                       !reminders[idx].preAlertSent,
@@ -271,6 +442,9 @@ public final class TimerEngine {
 
         if didMutate {
             persistState()
+            if !newlyTriggered.isEmpty {
+                onRemindersChanged?()
+            }
         }
 
         for item in preAlerts {
@@ -287,7 +461,7 @@ public final class TimerEngine {
     public func snoozeReminder(id: UUID, addedSeconds: Int) {
         guard let idx = reminders.firstIndex(where: { $0.id == id }) else { return }
         let now = clock.now
-        let clamped = max(10, min(24 * 3600, addedSeconds))
+        let clamped = max(10, min(Self.maxDurationSeconds, addedSeconds))
 
         var item = reminders[idx]
         item.status = .active
@@ -299,9 +473,16 @@ public final class TimerEngine {
         item.preAlertSent = false
 
         reminders[idx] = item
+        appendLog(
+            kind: .snoozed,
+            reminderID: item.id,
+            title: item.displayTitle,
+            details: "Snoozed +\(ReminderItem.formatDuration(clamped)) (#\(item.snoozeCount))"
+        )
         persistState()
+        onRemindersChanged?()
 
-        if settings.appleRemindersSyncEnabled, let syncProvider {
+        if isAnyAppleSyncEnabled, let syncProvider {
             Task { @MainActor in
                 await syncProvider.syncUpdated(item)
             }
@@ -316,7 +497,13 @@ public final class TimerEngine {
         archiveReminder(id: id, outcome: .dismissed)
     }
 
-    private func archiveReminder(id: UUID, outcome: HistoryOutcome) {
+    private func archiveReminder(
+        id: UUID,
+        outcome: HistoryOutcome,
+        skipExternalReminderCompletion: Bool = false,
+        customLogKind: ActivityEventKind? = nil,
+        customLogDetail: String? = nil
+    ) {
         guard let idx = reminders.firstIndex(where: { $0.id == id }) else { return }
         var item = reminders.remove(at: idx)
         let now = clock.now
@@ -336,17 +523,153 @@ public final class TimerEngine {
         )
 
         history.insert(entry, at: 0)
+        appendLog(
+            kind: customLogKind ?? (outcome == .completed ? .completed : .dismissed),
+            reminderID: item.id,
+            title: item.displayTitle,
+            details: customLogDetail ?? (
+                outcome == .completed
+                    ? "Completed after \(ReminderItem.formatDuration(actualElapsed))"
+                    : "Dismissed without completing"
+            )
+        )
         persistState()
+        onRemindersChanged?()
 
-        if settings.appleRemindersSyncEnabled, let syncProvider {
+        if isAnyAppleSyncEnabled, let syncProvider {
             if outcome == .completed {
-                Task { @MainActor in
-                    await syncProvider.syncCompleted(item)
+                if !skipExternalReminderCompletion {
+                    Task { @MainActor in
+                        await syncProvider.syncCompleted(item)
+                    }
                 }
-            } else if let extID = item.externalReminderID {
+            } else if item.externalReminderID != nil || item.externalCalendarEventID != nil {
                 Task { @MainActor in
-                    await syncProvider.syncDeleted(externalID: extID)
+                    await syncProvider.syncDeleted(
+                        reminderID: item.externalReminderID,
+                        calendarEventID: item.externalCalendarEventID
+                    )
                 }
+            }
+        }
+    }
+
+    public func reconcileAllFromSyncProvider() async {
+        guard isAnyAppleSyncEnabled, let syncProvider else { return }
+        let snapshotTargets = reminders.filter {
+            ($0.status == .active || $0.status == .paused || $0.status == .triggered)
+                && ($0.externalReminderID != nil || $0.externalCalendarEventID != nil)
+        }
+        for item in snapshotTargets {
+            guard let snapshot = await syncProvider.fetchExternalSnapshot(for: item) else { continue }
+            applyExternalSnapshot(snapshot, for: item.id)
+        }
+    }
+
+    public func applyExternalSnapshot(_ snapshot: ExternalSyncSnapshot, for reminderID: UUID) {
+        guard let idx = reminders.firstIndex(where: { $0.id == reminderID }) else { return }
+        var item = reminders[idx]
+        let now = clock.now
+
+        let reminderDeleted = item.externalReminderID != nil && snapshot.reminderExists == false
+        let calendarDeleted = item.externalCalendarEventID != nil && snapshot.calendarEventExists == false
+
+        if reminderDeleted || calendarDeleted {
+            reminders.remove(at: idx)
+            let source = reminderDeleted ? "Apple Reminders" : "Apple Calendar"
+            appendLog(
+                kind: .externalSyncDeleted,
+                reminderID: item.id,
+                title: item.displayTitle,
+                details: "Deleted in \(source); removed from SpacedOut"
+            )
+            persistState()
+            onRemindersChanged?()
+
+            if let syncProvider {
+                let remainingRemID = reminderDeleted ? nil : item.externalReminderID
+                let remainingCalID = calendarDeleted ? nil : item.externalCalendarEventID
+                if remainingRemID != nil || remainingCalID != nil {
+                    Task { @MainActor in
+                        await syncProvider.syncDeleted(reminderID: remainingRemID, calendarEventID: remainingCalID)
+                    }
+                }
+            }
+            return
+        }
+
+        if snapshot.reminderCompleted {
+            archiveReminder(
+                id: item.id,
+                outcome: .completed,
+                skipExternalReminderCompletion: true,
+                customLogKind: .externalSyncUpdated,
+                customLogDetail: "Marked completed in Apple Reminders"
+            )
+            return
+        }
+
+        // check title or schedule changes from either Apple Reminders or Apple Calendar
+        var changedFields: [String] = []
+        var changeSource = "Apple Sync"
+
+        let currentTitle = item.displayTitle
+        if let rTitle = snapshot.reminderTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !rTitle.isEmpty, rTitle != currentTitle {
+            item.title = rTitle
+            changedFields.append("title -> '\(rTitle)'")
+            changeSource = "Apple Reminders"
+        } else if let cTitle = snapshot.calendarTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !cTitle.isEmpty, cTitle != currentTitle {
+            item.title = cTitle
+            changedFields.append("title -> '\(cTitle)'")
+            changeSource = "Apple Calendar"
+        }
+
+        if let rDate = snapshot.reminderTargetDate,
+           abs(rDate.timeIntervalSince(item.targetDate)) > 2 {
+            applyExternalTargetDate(rDate, onto: &item, now: now)
+            changedFields.append("time -> \(item.formattedTargetDate(relativeTo: now))")
+            changeSource = "Apple Reminders"
+        } else if let cDate = snapshot.calendarTargetDate,
+                  abs(cDate.timeIntervalSince(item.targetDate)) > 2 {
+            applyExternalTargetDate(cDate, onto: &item, now: now)
+            changedFields.append("time -> \(item.formattedTargetDate(relativeTo: now))")
+            changeSource = "Apple Calendar"
+        }
+
+        guard !changedFields.isEmpty else { return }
+
+        reminders[idx] = item
+        appendLog(
+            kind: .externalSyncUpdated,
+            reminderID: item.id,
+            title: item.displayTitle,
+            details: "Updated from \(changeSource): \(changedFields.joined(separator: ", "))"
+        )
+        persistState()
+        onRemindersChanged?()
+
+        if let syncProvider {
+            Task { @MainActor in
+                await syncProvider.syncUpdated(item)
+            }
+        }
+    }
+
+    private func applyExternalTargetDate(_ newDate: Date, onto item: inout ReminderItem, now: Date) {
+        item.targetDate = newDate
+        if newDate > now {
+            let secs = max(10, min(Self.maxDurationSeconds, Int(newDate.timeIntervalSince(now).rounded())))
+            item.durationSeconds = secs
+            if item.status == .triggered {
+                item.status = .active
+            }
+            if item.status == .paused {
+                item.pausedRemainingSeconds = TimeInterval(secs)
+            }
+            if secs > settings.preAlertSeconds {
+                item.preAlertSent = false
             }
         }
     }
@@ -368,6 +691,31 @@ public final class TimerEngine {
     public func clearHistory() {
         history.removeAll()
         persistState()
+    }
+
+    public func clearActivityLog() {
+        activityLog.removeAll()
+        persistState()
+    }
+
+    public func recordWatchdogEvent(_ details: String, title: String = "Accountability Watchdog") {
+        appendLog(kind: .watchdogEvent, reminderID: nil, title: title, details: details)
+        persistState()
+    }
+
+    public func touchLastSeen() {
+        guard !reminders.isEmpty else { return }
+        persistState()
+    }
+
+    public func exportActivityLogText() -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var lines: [String] = ["SpacedOut Activity Log (\(activityLog.count) events)", ""]
+        for entry in activityLog {
+            lines.append("[\(formatter.string(from: entry.timestamp))] [\(entry.kind.label)] \(entry.reminderTitle) — \(entry.details)")
+        }
+        return lines.joined(separator: "\n") + "\n"
     }
 
     public func dailyStats(for date: Date? = nil, calendar: Calendar = .current) -> DailyFocusStats {
@@ -398,45 +746,120 @@ public final class TimerEngine {
         }
         persistState()
         onSettingsChanged?(settings)
+        onRemindersChanged?()
     }
 
-    public func setExternalReminderID(_ externalID: String, for id: UUID) {
+    public func setExternalSyncIDs(_ ids: SyncIdentifiers, for id: UUID) {
         guard let idx = reminders.firstIndex(where: { $0.id == id }) else { return }
-        reminders[idx].externalReminderID = externalID
+        if let remID = ids.reminderID {
+            reminders[idx].externalReminderID = remID
+        }
+        if let calID = ids.calendarEventID {
+            reminders[idx].externalCalendarEventID = calID
+        }
         persistState()
     }
 
     public func resetAllData() {
         reminders.removeAll()
         history.removeAll()
+        activityLog.removeAll()
         settings = AppSettings()
         persistState()
         onSettingsChanged?(settings)
+        onRemindersChanged?()
+    }
+
+    private func appendLog(kind: ActivityEventKind, reminderID: UUID?, title: String, details: String) {
+        let entry = ActivityLogEntry(
+            timestamp: clock.now,
+            kind: kind,
+            reminderID: reminderID,
+            reminderTitle: title,
+            details: details
+        )
+        activityLog.insert(entry, at: 0)
+        if activityLog.count > Self.maxActivityLogEntries {
+            activityLog.removeLast(activityLog.count - Self.maxActivityLogEntries)
+        }
     }
 
     private func loadInitialState() {
         do {
             let loaded = try store.load()
-            self.reminders = loaded.reminders.filter {
+            let now = clock.now
+            var recovered = loaded.reminders.filter {
                 $0.status == .active || $0.status == .paused || $0.status == .triggered
             }
             self.history = loaded.history.sorted { $0.finishedAt > $1.finishedAt }
-            self.settings = loaded.settings
+            self.activityLog = loaded.activityLog.sorted { $0.timestamp > $1.timestamp }
+            var loadedSettings = loaded.settings
+            self.lastSeenAt = loaded.lastSeenAt
+
+            // upgrade v1 state so default Apple sync & watchdog turn on seamlessly
+            var needsPersist = false
+            if loaded.schemaVersion < 2 {
+                loadedSettings.appleRemindersSyncEnabled = true
+                loadedSettings.appleCalendarSyncEnabled = true
+                loadedSettings.accountabilityWatchdogEnabled = true
+                needsPersist = true
+            }
+            self.settings = loadedSettings
+
+            for idx in recovered.indices {
+                if recovered[idx].status == .active && recovered[idx].targetDate <= now {
+                    recovered[idx].status = .triggered
+                    appendLog(
+                        kind: .recoveredAfterRestart,
+                        reminderID: recovered[idx].id,
+                        title: recovered[idx].displayTitle,
+                        details: "Expired at \(recovered[idx].formattedTargetDate(relativeTo: now)) while app was closed — re-armed alert on launch"
+                    )
+                    needsPersist = true
+                } else if recovered[idx].status == .triggered {
+                    appendLog(
+                        kind: .recoveredAfterRestart,
+                        reminderID: recovered[idx].id,
+                        title: recovered[idx].displayTitle,
+                        details: "Unresolved overdue alert restored after restart"
+                    )
+                    needsPersist = true
+                } else if let prevSeen = loaded.lastSeenAt, now.timeIntervalSince(prevSeen) > 15 {
+                    let gap = Int(now.timeIntervalSince(prevSeen).rounded())
+                    appendLog(
+                        kind: .recoveredAfterRestart,
+                        reminderID: recovered[idx].id,
+                        title: recovered[idx].displayTitle,
+                        details: "Restored \(recovered[idx].status.rawValue) timer after restart (offline \(ReminderItem.formatDuration(gap)))"
+                    )
+                    needsPersist = true
+                }
+            }
+
+            self.reminders = recovered
             self.lastPersistenceError = nil
+            if needsPersist || !recovered.isEmpty {
+                persistState()
+            }
         } catch {
             self.reminders = []
             self.history = []
+            self.activityLog = []
             self.settings = AppSettings()
             self.lastPersistenceError = error.localizedDescription
         }
     }
 
     private func persistState() {
+        let now = clock.now
+        lastSeenAt = now
         let snapshot = PersistedState(
             schemaVersion: PersistedState.currentSchemaVersion,
             reminders: reminders,
             history: history,
-            settings: settings
+            activityLog: activityLog,
+            settings: settings,
+            lastSeenAt: now
         )
         do {
             try store.save(snapshot)

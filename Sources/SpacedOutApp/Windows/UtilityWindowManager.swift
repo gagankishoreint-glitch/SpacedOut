@@ -36,7 +36,7 @@ final class UtilityWindowManager {
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 660, height: 540),
+            contentRect: NSRect(x: 0, y: 0, width: 700, height: 560),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -44,7 +44,7 @@ final class UtilityWindowManager {
         window.title = "Task History"
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 520, height: 420)
+        window.minSize = NSSize(width: 560, height: 440)
         window.center()
         window.contentView = NSHostingView(
             rootView: HistoryView()
@@ -60,7 +60,7 @@ final class UtilityWindowManager {
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 580, height: 545),
+            contentRect: NSRect(x: 0, y: 0, width: 590, height: 585),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false

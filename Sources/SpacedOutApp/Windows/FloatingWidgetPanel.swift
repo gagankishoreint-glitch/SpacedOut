@@ -85,6 +85,11 @@ final class FloatingWidgetController: NSObject, NSWindowDelegate {
         }
     }
     func hide() { panel.orderOut(nil) }
+    func makeKeyIfVisible() {
+        if panel.isVisible {
+            panel.makeKey()
+        }
+    }
 
     func applySettings(_ settings: AppSettings) {
         panel.level = settings.alwaysOnTop ? .floating : .normal

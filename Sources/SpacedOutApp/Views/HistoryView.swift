@@ -1,6 +1,13 @@
 import SpacedOutCore
 import SwiftUI
 
+enum HistoryWindowTab: String, CaseIterable, Identifiable {
+    case taskHistory = "Task History"
+    case activityLog = "Activity Log"
+
+    var id: String { rawValue }
+}
+
 enum HistoryFilter: String, CaseIterable, Identifiable {
     case all = "All"
     case completed = "Completed"
@@ -13,8 +20,10 @@ struct HistoryView: View {
     @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.colorScheme) private var systemColorScheme
 
+    @State private var selectedTab: HistoryWindowTab = .taskHistory
     @State private var searchQuery = ""
     @State private var filter: HistoryFilter = .all
+    @State private var logCategory: ActivityLogCategory = .all
     @State private var showClearConfirmation = false
 
     private var scheme: ColorScheme {
@@ -39,10 +48,31 @@ struct HistoryView: View {
         }
     }
 
+    private var filteredLogEntries: [ActivityLogEntry] {
+        coordinator.engine.activityLog.filter { entry in
+            if logCategory != .all && entry.kind.category != logCategory {
+                return false
+            }
+            let q = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !q.isEmpty else { return true }
+            return entry.reminderTitle.localizedCaseInsensitiveContains(q)
+                || entry.details.localizedCaseInsensitiveContains(q)
+                || entry.kind.label.localizedCaseInsensitiveContains(q)
+        }
+    }
+
     private var groupedByDay: [(dayTitle: String, entries: [HistoryEntry])] {
+        groupDates(filteredEntries, dateKeyPath: \.finishedAt)
+    }
+
+    private var groupedLogByDay: [(dayTitle: String, entries: [ActivityLogEntry])] {
+        groupDates(filteredLogEntries, dateKeyPath: \.timestamp)
+    }
+
+    private func groupDates<T>(_ items: [T], dateKeyPath: KeyPath<T, Date>) -> [(dayTitle: String, entries: [T])] {
         let calendar = Calendar.current
-        let grouped = Dictionary(grouping: filteredEntries) { entry in
-            calendar.startOfDay(for: entry.finishedAt)
+        let grouped = Dictionary(grouping: items) { item in
+            calendar.startOfDay(for: item[keyPath: dateKeyPath])
         }
         let sortedDays = grouped.keys.sorted(by: >)
         let formatter = DateFormatter()
@@ -66,29 +96,43 @@ struct HistoryView: View {
         let stats = coordinator.engine.dailyStats()
         let accent = SpacedTheme.accent(.mint, scheme: scheme)
 
-        VStack(spacing: 16) {
-            HStack(spacing: 10) {
-                StatTile(
-                    title: "Completed Today",
-                    value: "\(stats.completedCount)",
-                    icon: "checkmark.circle.fill",
-                    accent: accent,
-                    scheme: scheme
-                )
-                StatTile(
-                    title: "Focus Minutes",
-                    value: "\(stats.totalFocusMinutes)m",
-                    icon: "clock.fill",
-                    accent: SpacedTheme.accent(.sky, scheme: scheme),
-                    scheme: scheme
-                )
-                StatTile(
-                    title: "On-Time Rate",
-                    value: "\(stats.onTimePercentage)%",
-                    icon: "sparkles",
-                    accent: SpacedTheme.accent(.amber, scheme: scheme),
-                    scheme: scheme
-                )
+        VStack(spacing: 14) {
+            HStack {
+                Picker("", selection: $selectedTab) {
+                    Text("Task History").tag(HistoryWindowTab.taskHistory)
+                    Text("Activity Log (\(coordinator.engine.activityLog.count))").tag(HistoryWindowTab.activityLog)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 290)
+
+                Spacer()
+            }
+
+            if selectedTab == .taskHistory {
+                HStack(spacing: 10) {
+                    StatTile(
+                        title: "Completed Today",
+                        value: "\(stats.completedCount)",
+                        icon: "checkmark.circle.fill",
+                        accent: accent,
+                        scheme: scheme
+                    )
+                    StatTile(
+                        title: "Focus Minutes",
+                        value: "\(stats.totalFocusMinutes)m",
+                        icon: "clock.fill",
+                        accent: SpacedTheme.accent(.sky, scheme: scheme),
+                        scheme: scheme
+                    )
+                    StatTile(
+                        title: "On-Time Rate",
+                        value: "\(stats.onTimePercentage)%",
+                        icon: "sparkles",
+                        accent: SpacedTheme.accent(.amber, scheme: scheme),
+                        scheme: scheme
+                    )
+                }
             }
 
             HStack(spacing: 10) {
@@ -96,9 +140,12 @@ struct HistoryView: View {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 12))
                         .foregroundStyle(SpacedTheme.inkMuted(for: scheme))
-                    TextField("Search past reminders…", text: $searchQuery)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12.5))
+                    TextField(
+                        selectedTab == .taskHistory ? "Search past reminders…" : "Search activity log…",
+                        text: $searchQuery
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12.5))
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -111,74 +158,124 @@ struct HistoryView: View {
                         .stroke(SpacedTheme.hairlineBorder(for: scheme), lineWidth: 0.8)
                 )
 
-                Picker("", selection: $filter) {
-                    ForEach(HistoryFilter.allCases) { f in
-                        Text(f.rawValue).tag(f)
+                if selectedTab == .taskHistory {
+                    Picker("", selection: $filter) {
+                        ForEach(HistoryFilter.allCases) { f in
+                            Text(f.rawValue).tag(f)
+                        }
                     }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 210)
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 210)
 
-                Button {
-                    coordinator.exportICS()
-                } label: {
-                    Label("Export .ics", systemImage: "square.and.arrow.up")
-                        .font(.system(size: 12, weight: .medium))
-                }
-                .buttonStyle(.bordered)
-                .disabled(coordinator.engine.history.isEmpty && coordinator.engine.activeOrPausedReminders.isEmpty)
+                    Button {
+                        coordinator.exportICS()
+                    } label: {
+                        Label("Export .ics", systemImage: "square.and.arrow.up")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(coordinator.engine.history.isEmpty && coordinator.engine.activeOrPausedReminders.isEmpty)
 
-                Button(role: .destructive) {
-                    showClearConfirmation = true
-                } label: {
-                    Image(systemName: "trash")
+                    Button(role: .destructive) {
+                        showClearConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(coordinator.engine.history.isEmpty)
+                    .help("Clear all task history")
+                } else {
+                    Picker("", selection: $logCategory) {
+                        ForEach(ActivityLogCategory.allCases) { cat in
+                            Text(cat.rawValue).tag(cat)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 280)
+
+                    Button {
+                        coordinator.exportActivityLog()
+                    } label: {
+                        Label("Export Log", systemImage: "square.and.arrow.up")
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(coordinator.engine.activityLog.isEmpty)
+
+                    Button(role: .destructive) {
+                        showClearConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(coordinator.engine.activityLog.isEmpty)
+                    .help("Clear activity log")
                 }
-                .buttonStyle(.bordered)
-                .disabled(coordinator.engine.history.isEmpty)
-                .help("Clear all history")
             }
 
-            if groupedByDay.isEmpty {
-                Spacer()
-                VStack(spacing: 10) {
-                    BrandLogoMark(size: 36, color: SpacedTheme.inkMuted(for: scheme))
-                    Text(coordinator.engine.history.isEmpty ? "No completed tasks yet" : "No matching history")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(SpacedTheme.inkPrimary(for: scheme))
-                    Text("Finished and dismissed reminders will appear here with quick re-run controls.")
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(SpacedTheme.inkMuted(for: scheme))
-                }
-                Spacer()
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        ForEach(groupedByDay, id: \.dayTitle) { section in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(section.dayTitle.uppercased())
-                                    .font(.system(size: 10.5, weight: .bold))
-                                    .tracking(0.9)
-                                    .foregroundStyle(SpacedTheme.inkMuted(for: scheme))
-                                    .padding(.horizontal, 4)
+            if selectedTab == .taskHistory {
+                if groupedByDay.isEmpty {
+                    emptyPlaceholder(
+                        title: coordinator.engine.history.isEmpty ? "No completed tasks yet" : "No matching history",
+                        subtitle: "Finished and dismissed reminders will appear here with quick re-run controls."
+                    )
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 14) {
+                            ForEach(groupedByDay, id: \.dayTitle) { section in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(section.dayTitle.uppercased())
+                                        .font(.system(size: 10.5, weight: .bold))
+                                        .tracking(0.9)
+                                        .foregroundStyle(SpacedTheme.inkMuted(for: scheme))
+                                        .padding(.horizontal, 4)
 
-                                ForEach(section.entries) { entry in
-                                    HistoryEntryRow(
-                                        entry: entry,
-                                        scheme: scheme,
-                                        onRerun: {
-                                            coordinator.engine.rerunHistoryEntry(entry)
-                                            coordinator.showFloatingWidget(focusInput: false)
-                                        },
-                                        onDelete: {
-                                            coordinator.engine.deleteHistoryEntry(id: entry.id)
-                                        }
-                                    )
+                                    ForEach(section.entries) { entry in
+                                        HistoryEntryRow(
+                                            entry: entry,
+                                            scheme: scheme,
+                                            onRerun: {
+                                                coordinator.engine.rerunHistoryEntry(entry)
+                                                coordinator.showFloatingWidget(focusInput: false)
+                                            },
+                                            onDelete: {
+                                                coordinator.engine.deleteHistoryEntry(id: entry.id)
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
+                        .padding(.bottom, 6)
                     }
-                    .padding(.bottom, 6)
+                }
+            } else {
+                if groupedLogByDay.isEmpty {
+                    emptyPlaceholder(
+                        title: coordinator.engine.activityLog.isEmpty ? "No activity logged yet" : "No matching log entries",
+                        subtitle: "Creates, edits, snoozes, restarts, Apple sync changes, and removals are recorded here."
+                    )
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 14) {
+                            ForEach(groupedLogByDay, id: \.dayTitle) { section in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(section.dayTitle.uppercased())
+                                        .font(.system(size: 10.5, weight: .bold))
+                                        .tracking(0.9)
+                                        .foregroundStyle(SpacedTheme.inkMuted(for: scheme))
+                                        .padding(.horizontal, 4)
+
+                                    ForEach(section.entries) { entry in
+                                        ActivityLogEntryRow(entry: entry, scheme: scheme)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.bottom, 6)
+                    }
                 }
             }
         }
@@ -192,17 +289,38 @@ struct HistoryView: View {
         }
         .preferredColorScheme(SpacedTheme.colorScheme(for: coordinator.engine.settings.themeMode))
         .confirmationDialog(
-            "Clear all task history?",
+            selectedTab == .taskHistory ? "Clear all task history?" : "Clear entire activity log?",
             isPresented: $showClearConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Clear History", role: .destructive) {
-                coordinator.engine.clearHistory()
+            Button("Clear", role: .destructive) {
+                if selectedTab == .taskHistory {
+                    coordinator.engine.clearHistory()
+                } else {
+                    coordinator.engine.clearActivityLog()
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes all past reminder logs and cannot be undone.")
+            Text("This removes the selected logs locally and cannot be undone.")
         }
+    }
+
+    @ViewBuilder
+    private func emptyPlaceholder(title: String, subtitle: String) -> some View {
+        Spacer()
+        VStack(spacing: 10) {
+            BrandLogoMark(size: 36, color: SpacedTheme.inkMuted(for: scheme))
+            Text(title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(SpacedTheme.inkPrimary(for: scheme))
+            Text(subtitle)
+                .font(.system(size: 12.5))
+                .foregroundStyle(SpacedTheme.inkMuted(for: scheme))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 380)
+        }
+        Spacer()
     }
 }
 
@@ -321,5 +439,85 @@ private struct HistoryEntryRow: View {
                 .stroke(SpacedTheme.hairlineBorder(for: scheme), lineWidth: 0.8)
         )
         .onHover { isHovered = $0 }
+    }
+}
+
+private struct ActivityLogEntryRow: View {
+    let entry: ActivityLogEntry
+    let scheme: ColorScheme
+
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
+    var body: some View {
+        let style = badgeStyle(for: entry.kind)
+
+        HStack(alignment: .center, spacing: 11) {
+            Image(systemName: style.icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(style.color)
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(style.color.opacity(0.14)))
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(entry.reminderTitle)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(SpacedTheme.inkPrimary(for: scheme))
+                        .lineLimit(1)
+
+                    Text(entry.kind.label)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(style.color)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(style.color.opacity(0.12)))
+                }
+
+                Text(entry.details)
+                    .font(.system(size: 11))
+                    .foregroundStyle(SpacedTheme.inkMuted(for: scheme))
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 8)
+
+            Text(Self.timeFormatter.string(from: entry.timestamp))
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(SpacedTheme.inkMuted(for: scheme))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(SpacedTheme.cardSurface(for: scheme))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(SpacedTheme.hairlineBorder(for: scheme), lineWidth: 0.8)
+        )
+    }
+
+    private func badgeStyle(for kind: ActivityEventKind) -> (icon: String, color: Color) {
+        switch kind {
+        case .created: return ("plus.circle.fill", SpacedTheme.accent(.mint, scheme: scheme))
+        case .edited: return ("pencil.circle.fill", SpacedTheme.accent(.sky, scheme: scheme))
+        case .adjusted: return ("slider.horizontal.3", SpacedTheme.accent(.sky, scheme: scheme))
+        case .paused: return ("pause.circle.fill", SpacedTheme.urgencyAmber(for: scheme))
+        case .resumed: return ("play.circle.fill", SpacedTheme.accent(.mint, scheme: scheme))
+        case .snoozed: return ("zzz", SpacedTheme.urgencyAmber(for: scheme))
+        case .triggered: return ("bell.badge.fill", SpacedTheme.overdueCoral(for: scheme))
+        case .completed: return ("checkmark.circle.fill", SpacedTheme.accent(.mint, scheme: scheme))
+        case .dismissed: return ("minus.circle.fill", SpacedTheme.inkMuted(for: scheme))
+        case .deleted: return ("trash.circle.fill", SpacedTheme.overdueCoral(for: scheme))
+        case .recoveredAfterRestart: return ("arrow.clockwise.circle.fill", SpacedTheme.urgencyAmber(for: scheme))
+        case .externalSyncUpdated: return ("arrow.triangle.2.circlepath.circle.fill", SpacedTheme.accent(.sky, scheme: scheme))
+        case .externalSyncDeleted: return ("calendar.badge.minus", SpacedTheme.overdueCoral(for: scheme))
+        case .watchdogEvent: return ("shield.lefthalf.filled", SpacedTheme.accent(.amber, scheme: scheme))
+        }
     }
 }

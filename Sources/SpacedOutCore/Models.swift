@@ -41,6 +41,7 @@ public struct ReminderItem: Identifiable, Codable, Equatable, Sendable {
     public var totalSnoozedSeconds: Int
     public var completedAt: Date?
     public var externalReminderID: String?
+    public var externalCalendarEventID: String?
     public var accent: AccentPreset
     public var preAlertSent: Bool
 
@@ -57,6 +58,7 @@ public struct ReminderItem: Identifiable, Codable, Equatable, Sendable {
         totalSnoozedSeconds: Int = 0,
         completedAt: Date? = nil,
         externalReminderID: String? = nil,
+        externalCalendarEventID: String? = nil,
         accent: AccentPreset = .mint,
         preAlertSent: Bool = false
     ) {
@@ -72,13 +74,62 @@ public struct ReminderItem: Identifiable, Codable, Equatable, Sendable {
         self.totalSnoozedSeconds = totalSnoozedSeconds
         self.completedAt = completedAt
         self.externalReminderID = externalReminderID
+        self.externalCalendarEventID = externalCalendarEventID
         self.accent = accent
         self.preAlertSent = preAlertSent
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let createdAt = try c.decode(Date.self, forKey: .createdAt)
+        self.init(
+            id: try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID(),
+            title: try c.decodeIfPresent(String.self, forKey: .title) ?? "",
+            durationSeconds: try c.decodeIfPresent(Int.self, forKey: .durationSeconds) ?? 900,
+            createdAt: createdAt,
+            startedAt: try c.decodeIfPresent(Date.self, forKey: .startedAt) ?? createdAt,
+            targetDate: try c.decode(Date.self, forKey: .targetDate),
+            pausedRemainingSeconds: try c.decodeIfPresent(TimeInterval.self, forKey: .pausedRemainingSeconds),
+            status: try c.decodeIfPresent(ReminderStatus.self, forKey: .status) ?? .active,
+            snoozeCount: try c.decodeIfPresent(Int.self, forKey: .snoozeCount) ?? 0,
+            totalSnoozedSeconds: try c.decodeIfPresent(Int.self, forKey: .totalSnoozedSeconds) ?? 0,
+            completedAt: try c.decodeIfPresent(Date.self, forKey: .completedAt),
+            externalReminderID: try c.decodeIfPresent(String.self, forKey: .externalReminderID),
+            externalCalendarEventID: try c.decodeIfPresent(String.self, forKey: .externalCalendarEventID),
+            accent: try c.decodeIfPresent(AccentPreset.self, forKey: .accent) ?? .mint,
+            preAlertSent: try c.decodeIfPresent(Bool.self, forKey: .preAlertSent) ?? false
+        )
     }
 
     public var displayTitle: String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Quick Reminder" : trimmed
+    }
+
+    public var isSyncedExternally: Bool {
+        externalReminderID != nil || externalCalendarEventID != nil
+    }
+
+    public func formattedTargetDate(relativeTo now: Date = Date(), calendar: Calendar = .current) -> String {
+        let timeFmt = DateFormatter()
+        timeFmt.calendar = calendar
+        timeFmt.locale = Locale.current
+        timeFmt.dateStyle = .none
+        timeFmt.timeStyle = .short
+        let timePart = timeFmt.string(from: targetDate)
+
+        if calendar.isDate(targetDate, inSameDayAs: now) {
+            return timePart
+        }
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now),
+           calendar.isDate(targetDate, inSameDayAs: tomorrow) {
+            return "Tomorrow, \(timePart)"
+        }
+        let dateFmt = DateFormatter()
+        dateFmt.calendar = calendar
+        dateFmt.locale = Locale.current
+        dateFmt.setLocalizedDateFormatFromTemplate("MMM d")
+        return "\(dateFmt.string(from: targetDate)), \(timePart)"
     }
 
     public func remainingSeconds(at now: Date) -> TimeInterval {
@@ -119,6 +170,12 @@ public struct ReminderItem: Identifiable, Codable, Equatable, Sendable {
 
     public static func formatDuration(_ totalSeconds: Int) -> String {
         let clamped = max(0, totalSeconds)
+        if clamped >= 86400 {
+            let days = clamped / 86400
+            let hours = (clamped % 86400) / 3600
+            let mins = (clamped % 3600) / 60
+            return hours > 0 ? "\(days)d \(hours)h" : (mins > 0 ? "\(days)d \(mins)m" : "\(days)d")
+        }
         let hours = clamped / 3600
         let minutes = (clamped % 3600) / 60
         let seconds = clamped % 60
@@ -357,6 +414,91 @@ public struct SavedPoint: Codable, Equatable, Sendable {
     }
 }
 
+public enum ActivityEventKind: String, Codable, Sendable, CaseIterable {
+    case created
+    case edited
+    case adjusted
+    case paused
+    case resumed
+    case snoozed
+    case triggered
+    case completed
+    case dismissed
+    case deleted
+    case recoveredAfterRestart
+    case externalSyncUpdated
+    case externalSyncDeleted
+    case watchdogEvent
+
+    public var label: String {
+        switch self {
+        case .created: return "Created"
+        case .edited: return "Edited"
+        case .adjusted: return "Adjusted"
+        case .paused: return "Paused"
+        case .resumed: return "Resumed"
+        case .snoozed: return "Snoozed"
+        case .triggered: return "Due"
+        case .completed: return "Completed"
+        case .dismissed: return "Dismissed"
+        case .deleted: return "Removed"
+        case .recoveredAfterRestart: return "Restart Recovery"
+        case .externalSyncUpdated: return "Apple Sync"
+        case .externalSyncDeleted: return "Apple Sync"
+        case .watchdogEvent: return "Watchdog"
+        }
+    }
+
+    public var category: ActivityLogCategory {
+        switch self {
+        case .created, .paused, .resumed, .triggered, .completed, .dismissed, .deleted:
+            return .timers
+        case .edited, .adjusted, .snoozed:
+            return .edits
+        case .externalSyncUpdated, .externalSyncDeleted:
+            return .sync
+        case .recoveredAfterRestart, .watchdogEvent:
+            return .system
+        }
+    }
+}
+
+public enum ActivityLogCategory: String, Codable, Sendable, CaseIterable, Identifiable {
+    case all = "All"
+    case timers = "Timers"
+    case edits = "Edits"
+    case sync = "Sync"
+    case system = "Restarts"
+
+    public var id: String { rawValue }
+}
+
+public struct ActivityLogEntry: Identifiable, Codable, Equatable, Sendable {
+    public let id: UUID
+    public let timestamp: Date
+    public let kind: ActivityEventKind
+    public let reminderID: UUID?
+    public let reminderTitle: String
+    public let details: String
+
+    public init(
+        id: UUID = UUID(),
+        timestamp: Date = Date(),
+        kind: ActivityEventKind,
+        reminderID: UUID? = nil,
+        reminderTitle: String,
+        details: String
+    ) {
+        self.id = id
+        self.timestamp = timestamp
+        self.kind = kind
+        self.reminderID = reminderID
+        let trimmed = reminderTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.reminderTitle = trimmed.isEmpty ? "Quick Reminder" : trimmed
+        self.details = details
+    }
+}
+
 public struct AppSettings: Codable, Equatable, Sendable {
     public var displayMode: DisplayMode
     public var themeMode: ThemeMode
@@ -375,6 +517,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var globalShortcut: HotkeyBinding
     public var appleRemindersSyncEnabled: Bool
     public var appleRemindersListName: String
+    public var appleCalendarSyncEnabled: Bool
+    public var appleCalendarName: String
+    public var accountabilityWatchdogEnabled: Bool
     public var widgetOrigin: SavedPoint?
     public var launchAtLogin: Bool
 
@@ -394,8 +539,11 @@ public struct AppSettings: Codable, Equatable, Sendable {
         quickPresetsMinutes: [Int] = [5, 10, 15, 25],
         defaultDurationMinutes: Int = 15,
         globalShortcut: HotkeyBinding = .defaultToggleWidget,
-        appleRemindersSyncEnabled: Bool = false,
+        appleRemindersSyncEnabled: Bool = true,
         appleRemindersListName: String = "SpacedOut",
+        appleCalendarSyncEnabled: Bool = true,
+        appleCalendarName: String = "SpacedOut",
+        accountabilityWatchdogEnabled: Bool = true,
         widgetOrigin: SavedPoint? = nil,
         launchAtLogin: Bool = false
     ) {
@@ -416,6 +564,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
         self.globalShortcut = globalShortcut
         self.appleRemindersSyncEnabled = appleRemindersSyncEnabled
         self.appleRemindersListName = appleRemindersListName.isEmpty ? "SpacedOut" : appleRemindersListName
+        self.appleCalendarSyncEnabled = appleCalendarSyncEnabled
+        self.appleCalendarName = appleCalendarName.isEmpty ? "SpacedOut" : appleCalendarName
+        self.accountabilityWatchdogEnabled = accountabilityWatchdogEnabled
         self.widgetOrigin = widgetOrigin
         self.launchAtLogin = launchAtLogin
     }
@@ -441,6 +592,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
             globalShortcut: try c.decodeIfPresent(HotkeyBinding.self, forKey: .globalShortcut) ?? defaults.globalShortcut,
             appleRemindersSyncEnabled: try c.decodeIfPresent(Bool.self, forKey: .appleRemindersSyncEnabled) ?? defaults.appleRemindersSyncEnabled,
             appleRemindersListName: try c.decodeIfPresent(String.self, forKey: .appleRemindersListName) ?? defaults.appleRemindersListName,
+            appleCalendarSyncEnabled: try c.decodeIfPresent(Bool.self, forKey: .appleCalendarSyncEnabled) ?? defaults.appleCalendarSyncEnabled,
+            appleCalendarName: try c.decodeIfPresent(String.self, forKey: .appleCalendarName) ?? defaults.appleCalendarName,
+            accountabilityWatchdogEnabled: try c.decodeIfPresent(Bool.self, forKey: .accountabilityWatchdogEnabled) ?? defaults.accountabilityWatchdogEnabled,
             widgetOrigin: try c.decodeIfPresent(SavedPoint.self, forKey: .widgetOrigin),
             launchAtLogin: try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? defaults.launchAtLogin
         )
@@ -448,30 +602,38 @@ public struct AppSettings: Codable, Equatable, Sendable {
 }
 
 public struct PersistedState: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
     public var reminders: [ReminderItem]
     public var history: [HistoryEntry]
+    public var activityLog: [ActivityLogEntry]
     public var settings: AppSettings
+    public var lastSeenAt: Date?
 
     public init(
         schemaVersion: Int = PersistedState.currentSchemaVersion,
         reminders: [ReminderItem] = [],
         history: [HistoryEntry] = [],
-        settings: AppSettings = AppSettings()
+        activityLog: [ActivityLogEntry] = [],
+        settings: AppSettings = AppSettings(),
+        lastSeenAt: Date? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.reminders = reminders
         self.history = history
+        self.activityLog = activityLog
         self.settings = settings
+        self.lastSeenAt = lastSeenAt
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? PersistedState.currentSchemaVersion
+        self.schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
         self.reminders = try c.decodeIfPresent([ReminderItem].self, forKey: .reminders) ?? []
         self.history = try c.decodeIfPresent([HistoryEntry].self, forKey: .history) ?? []
+        self.activityLog = try c.decodeIfPresent([ActivityLogEntry].self, forKey: .activityLog) ?? []
         self.settings = try c.decodeIfPresent(AppSettings.self, forKey: .settings) ?? AppSettings()
+        self.lastSeenAt = try c.decodeIfPresent(Date.self, forKey: .lastSeenAt)
     }
 }

@@ -97,6 +97,12 @@ final class StatusBarController: NSObject {
         }
     }
 
+    func makePopoverKeyIfVisible() {
+        if let panel = popoverPanel, panel.isVisible {
+            panel.makeKey()
+        }
+    }
+
     private func createStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
@@ -295,5 +301,5 @@ final class StatusBarController: NSObject {
     @objc private func handleToggleSafeMode() { coordinator.togglePresentationSafeMode() }
     @objc private func handleOpenHistory() { coordinator.openHistoryWindow() }
     @objc private func handleOpenSettings() { coordinator.openSettingsWindow() }
-    @objc private func handleQuit() { NSApp.terminate(nil) }
+    @objc private func handleQuit() { coordinator.requestIntentionalQuit() }
 }

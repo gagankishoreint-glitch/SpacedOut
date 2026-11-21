@@ -5,7 +5,8 @@ struct ReminderRowView: View {
     let item: ReminderItem
     var onTogglePause: () -> Void
     var onAdjust: (Int) -> Void
-    var onRename: (String) -> Void
+    var onEdit: (String?, Int?, Date?, AccentPreset?) -> Void
+    var onPreparePopover: () -> Void
     var onComplete: () -> Void
     var onDelete: () -> Void
 
@@ -13,6 +14,7 @@ struct ReminderRowView: View {
     @State private var isHovered = false
     @State private var isEditingTitle = false
     @State private var draftTitle = ""
+    @State private var showEditPopover = false
     @FocusState private var titleFieldFocused: Bool
 
     var body: some View {
@@ -86,20 +88,22 @@ struct ReminderRowView: View {
                             }
                             .contentShape(Rectangle())
                             .onTapGesture {
+                                onPreparePopover()
                                 draftTitle = item.title
                                 isEditingTitle = true
                                 titleFieldFocused = true
                             }
-                            .help("Click to rename")
+                            .help("Click to rename, or use Edit below for date & time")
                         }
 
-                        HStack(spacing: 6) {
+                        HStack(spacing: 5) {
                             if isPaused {
                                 Text("Paused")
                                     .foregroundStyle(SpacedTheme.urgencyAmber(for: colorScheme))
                             } else {
-                                Text("Ends \(item.targetDate, style: .time)")
+                                Text("Ends \(item.formattedTargetDate(relativeTo: now))")
                                     .foregroundStyle(SpacedTheme.inkMuted(for: colorScheme))
+                                    .lineLimit(1)
                             }
 
                             if item.externalReminderID != nil {
@@ -108,29 +112,75 @@ struct ReminderRowView: View {
                                     .foregroundStyle(SpacedTheme.inkMuted(for: colorScheme))
                                     .help("Synced to Apple Reminders")
                             }
+
+                            if item.externalCalendarEventID != nil {
+                                Image(systemName: "calendar")
+                                    .font(.system(size: 8.5))
+                                    .foregroundStyle(SpacedTheme.inkMuted(for: colorScheme))
+                                    .help("Synced to Apple Calendar")
+                            }
                         }
                         .font(.system(size: 10.5))
                     }
 
                     Spacer(minLength: 6)
 
-                    Text(item.formattedRemaining(at: now))
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(
-                            isUrgent
-                                ? SpacedTheme.overdueCoral(for: colorScheme)
-                                : SpacedTheme.inkPrimary(for: colorScheme)
-                        )
+                    HStack(spacing: 6) {
+                        Text(item.formattedRemaining(at: now))
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(
+                                isUrgent
+                                    ? SpacedTheme.overdueCoral(for: colorScheme)
+                                    : SpacedTheme.inkPrimary(for: colorScheme)
+                            )
+
+                        Button {
+                            onPreparePopover()
+                            showEditPopover = true
+                        } label: {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(SpacedTheme.inkMuted(for: colorScheme))
+                                .frame(width: 22, height: 22)
+                                .background(Circle().fill(SpacedTheme.chipSurface(for: colorScheme)))
+                        }
+                        .buttonStyle(.plain)
+                        .contentShape(Circle())
+                        .opacity(isHovered || showEditPopover ? 1 : 0.45)
+                        .help("Edit title, time & date")
+                    }
                 }
 
-                if isHovered {
+                if isHovered || showEditPopover {
                     HStack(spacing: 5) {
                         QuickAdjustPill(label: "-1m") { onAdjust(-60) }
                         QuickAdjustPill(label: "+1m") { onAdjust(60) }
                         QuickAdjustPill(label: "+5m") { onAdjust(300) }
 
                         Spacer()
+
+                        Button {
+                            onPreparePopover()
+                            showEditPopover = true
+                        } label: {
+                            Label("Edit", systemImage: "pencil")
+                                .font(.system(size: 10.5, weight: .medium))
+                                .foregroundStyle(SpacedTheme.inkSecondary(for: colorScheme))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3.5)
+                                .background(
+                                    Capsule()
+                                        .fill(SpacedTheme.chipSurface(for: colorScheme))
+                                )
+                                .overlay(
+                                    Capsule()
+                                        .stroke(SpacedTheme.hairlineBorder(for: colorScheme), lineWidth: 0.7)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .contentShape(Capsule())
+                        .help("Edit reminder title, duration, or calendar time")
 
                         Button(action: onComplete) {
                             Label("Done", systemImage: "checkmark")
@@ -181,12 +231,25 @@ struct ReminderRowView: View {
                     isHovered = hovering
                 }
             }
+            .popover(isPresented: $showEditPopover, arrowEdge: .leading) {
+                ReminderEditPopover(
+                    item: item,
+                    scheme: colorScheme,
+                    onSave: { newTitle, newDuration, newDate, newAccent in
+                        onEdit(newTitle, newDuration, newDate, newAccent)
+                        showEditPopover = false
+                    },
+                    onCancel: {
+                        showEditPopover = false
+                    }
+                )
+            }
         }
     }
 
     private func commitRename() {
         isEditingTitle = false
-        onRename(draftTitle)
+        onEdit(draftTitle, nil, nil, nil)
     }
 
     private func cancelRename() {
@@ -195,29 +258,190 @@ struct ReminderRowView: View {
     }
 }
 
+private struct ReminderEditPopover: View {
+    enum EditScheduleMode: String, CaseIterable, Identifiable {
+        case duration = "Duration"
+        case calendar = "Date & Time"
+        var id: String { rawValue }
+    }
+
+    let item: ReminderItem
+    let scheme: ColorScheme
+    let onSave: (String?, Int?, Date?, AccentPreset?) -> Void
+    let onCancel: () -> Void
+
+    @State private var title: String
+    @State private var mode: EditScheduleMode
+    @State private var durationMinutes: Int
+    @State private var scheduledDate: Date
+    @State private var selectedAccent: AccentPreset
+
+    init(
+        item: ReminderItem,
+        scheme: ColorScheme,
+        onSave: @escaping (String?, Int?, Date?, AccentPreset?) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.item = item
+        self.scheme = scheme
+        self.onSave = onSave
+        self.onCancel = onCancel
+        _title = State(initialValue: item.title)
+        let remSeconds = max(60, Int(item.remainingSeconds(at: Date()).rounded()))
+        let remMinutes = max(1, Int((Double(remSeconds) / 60.0).rounded()))
+        _durationMinutes = State(initialValue: remMinutes)
+        _scheduledDate = State(initialValue: max(Date().addingTimeInterval(60), item.targetDate))
+        _mode = State(initialValue: remSeconds >= 7200 ? .calendar : .duration)
+        _selectedAccent = State(initialValue: item.accent)
+    }
+
+    var body: some View {
+        let accent = SpacedTheme.accent(selectedAccent, scheme: scheme)
+
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Edit Reminder")
+                .font(.system(size: 13.5, weight: .semibold))
+                .foregroundStyle(SpacedTheme.inkPrimary(for: scheme))
+
+            TextField("Reminder title…", text: $title)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { saveChanges() }
+
+            Picker("", selection: $mode) {
+                ForEach(EditScheduleMode.allCases) { m in
+                    Text(m.rawValue).tag(m)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+
+            if mode == .duration {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Remaining:")
+                            .font(.system(size: 12))
+                            .foregroundStyle(SpacedTheme.inkSecondary(for: scheme))
+                        Spacer()
+                        Stepper("\(durationMinutes) min", value: $durationMinutes, in: 1...1440)
+                            .monospacedDigit()
+                            .font(.system(size: 12.5, weight: .medium))
+                    }
+
+                    HStack(spacing: 6) {
+                        ForEach([5, 10, 15, 25, 45, 60], id: \.self) { mins in
+                            Button("\(mins)m") {
+                                durationMinutes = mins
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    DatePicker(
+                        "Date",
+                        selection: $scheduledDate,
+                        in: Date()...,
+                        displayedComponents: [.date]
+                    )
+                    .datePickerStyle(.graphical)
+
+                    DatePicker(
+                        "Time",
+                        selection: $scheduledDate,
+                        displayedComponents: [.hourAndMinute]
+                    )
+                    .font(.system(size: 12))
+                }
+            }
+
+            HStack(spacing: 8) {
+                Text("Accent")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(SpacedTheme.inkMuted(for: scheme))
+                Spacer()
+                ForEach(AccentPreset.allCases) { preset in
+                    let dotColor = SpacedTheme.accent(preset, scheme: scheme)
+                    Button {
+                        selectedAccent = preset
+                    } label: {
+                        Circle()
+                            .fill(dotColor)
+                            .frame(width: 15, height: 15)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white, lineWidth: selectedAccent == preset ? 2 : 0)
+                            )
+                            .scaleEffect(selectedAccent == preset ? 1.15 : 1.0)
+                    }
+                    .buttonStyle(.plain)
+                    .help(preset.label)
+                }
+            }
+
+            Divider()
+
+            HStack {
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.bordered)
+                    .keyboardShortcut(.cancelAction)
+
+                Spacer()
+
+                Button("Save Changes") {
+                    saveChanges()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(accent)
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(14)
+        .frame(width: 292)
+    }
+
+    private func saveChanges() {
+        switch mode {
+        case .duration:
+            onSave(title, durationMinutes * 60, nil, selectedAccent)
+        case .calendar:
+            let safeDate = max(Date().addingTimeInterval(15), scheduledDate)
+            onSave(title, nil, safeDate, selectedAccent)
+        }
+    }
+}
+
 private struct QuickAdjustPill: View {
     let label: String
     let action: () -> Void
+
     @Environment(\.colorScheme) private var colorScheme
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(.system(size: 10.5, weight: .medium, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(SpacedTheme.inkSecondary(for: colorScheme))
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
+                .padding(.horizontal, 7.5)
+                .padding(.vertical, 3.5)
                 .background(
                     Capsule()
-                        .fill(SpacedTheme.chipSurface(for: colorScheme))
+                        .fill(
+                            isHovered
+                                ? SpacedTheme.cardSurface(for: colorScheme)
+                                : SpacedTheme.chipSurface(for: colorScheme)
+                        )
                 )
                 .overlay(
                     Capsule()
-                        .stroke(SpacedTheme.hairlineBorder(for: colorScheme), lineWidth: 0.75)
+                        .stroke(SpacedTheme.hairlineBorder(for: colorScheme), lineWidth: 0.7)
                 )
         }
         .buttonStyle(.plain)
         .contentShape(Capsule())
+        .onHover { isHovered = $0 }
     }
 }

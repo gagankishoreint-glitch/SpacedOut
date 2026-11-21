@@ -18,6 +18,7 @@ final class AppCoordinator {
     let remindersSync: AppleRemindersService
     let notifications: NotificationService
     let hotkeyManager: GlobalHotkeyManager
+    let watchdog: WatchdogService
 
     var isWidgetVisible: Bool = false
     var isMenuBarPopoverVisible: Bool = false
@@ -34,12 +35,18 @@ final class AppCoordinator {
 
     private var evaluationTimer: Timer?
     private var wakeObserver: NSObjectProtocol?
+    private var tickCounter: Int = 0
     private var didStart = false
 
     init() {
         let engine = TimerEngine()
         let remindersSync = AppleRemindersService()
-        remindersSync.configureTargetList(engine.settings.appleRemindersListName)
+        remindersSync.configure(
+            remindersEnabled: engine.settings.appleRemindersSyncEnabled,
+            remindersListName: engine.settings.appleRemindersListName,
+            calendarEnabled: engine.settings.appleCalendarSyncEnabled,
+            calendarName: engine.settings.appleCalendarName
+        )
         engine.attachSyncProvider(remindersSync)
 
         self.engine = engine
@@ -47,6 +54,7 @@ final class AppCoordinator {
         self.remindersSync = remindersSync
         self.notifications = NotificationService()
         self.hotkeyManager = GlobalHotkeyManager()
+        self.watchdog = WatchdogService()
         self.selectedDialMinutes = engine.settings.defaultDurationMinutes
 
         wireEngineCallbacks()
@@ -55,6 +63,12 @@ final class AppCoordinator {
     func start() {
         guard !didStart else { return }
         didStart = true
+
+        watchdog.markRunningInstance()
+        if watchdog.consumeWatchdogRelaunchFlag() {
+            engine.recordWatchdogEvent("Auto-relaunched SpacedOut while active reminder(s) were running")
+        }
+        watchdog.syncState(armed: engine.shouldArmWatchdog)
 
         applyActivationPolicy(showDockIcon: engine.settings.showDockIcon)
 
@@ -69,8 +83,21 @@ final class AppCoordinator {
                 self.showFloatingWidget(focusInput: false)
             }
         }
-        Task { @MainActor in
-            await notifications.requestPermissionIfNeeded()
+
+        remindersSync.onExternalStoreChanged = { [weak self] in
+            Task { @MainActor [weak self] in
+                await self?.reconcileAppleSyncNow()
+            }
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.notifications.requestPermissionIfNeeded()
+            await self.remindersSync.requestDefaultAccessIfNeeded(
+                reminders: self.engine.settings.appleRemindersSyncEnabled,
+                calendar: self.engine.settings.appleCalendarSyncEnabled
+            )
+            await self.reconcileAppleSyncNow()
         }
 
         floatingWidgetController = FloatingWidgetController(coordinator: self)
@@ -87,20 +114,28 @@ final class AppCoordinator {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.evaluateTimersNow() }
+            Task { @MainActor in
+                self?.evaluateTimersNow()
+                await self?.reconcileAppleSyncNow()
+            }
         }
 
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.evaluateTimersNow()
+                self?.handleTick()
             }
         }
         timer.tolerance = 0.15
         RunLoop.main.add(timer, forMode: .common)
         evaluationTimer = timer
 
+        let hadPreexistingOverdue = !engine.triggeredQueue.isEmpty
         evaluateTimersNow()
-        refreshAlertPresentation()
+        if hadPreexistingOverdue {
+            handleTriggeredBatch(engine.triggeredQueue)
+        } else {
+            refreshAlertPresentation()
+        }
     }
 
     func shutdown() {
@@ -111,6 +146,8 @@ final class AppCoordinator {
             self.wakeObserver = nil
         }
         hotkeyManager.shutdown()
+        engine.touchLastSeen()
+        watchdog.clearRunningInstanceIfOwned()
     }
 
     func showFloatingWidget(focusInput: Bool = false) {
@@ -124,6 +161,14 @@ final class AppCoordinator {
     func hideFloatingWidget() {
         floatingWidgetController?.hide()
         isWidgetVisible = false
+    }
+
+    func ensureActivePanelKey() {
+        if isMenuBarPopoverVisible {
+            statusBarController?.makePopoverKeyIfVisible()
+        } else {
+            floatingWidgetController?.makeKeyIfVisible()
+        }
     }
 
     func toggleFloatingWidget(focusInput: Bool = true) {
@@ -201,6 +246,20 @@ final class AppCoordinator {
     }
 
     @discardableResult
+    func createCalendarReminder(title: String, targetDate: Date, accent: AccentPreset = .mint) -> ReminderItem {
+        let seconds = max(10, Int(targetDate.timeIntervalSinceNow.rounded()))
+        let item = engine.createReminder(
+            title: title,
+            durationSeconds: seconds,
+            targetDate: targetDate,
+            accent: accent
+        )
+        soundHaptics.performHaptic(.alignment, enabled: engine.settings.hapticsEnabled)
+        statusBarController?.refreshStatusTitle()
+        return item
+    }
+
+    @discardableResult
     func createDialReminder(title: String) -> ReminderItem {
         createPresetReminder(minutes: selectedDialMinutes, title: title)
     }
@@ -217,9 +276,23 @@ final class AppCoordinator {
         statusBarController?.refreshStatusTitle()
     }
 
-    func updateReminder(id: UUID, title: String? = nil, durationSeconds: Int? = nil) {
-        engine.updateReminder(id: id, title: title, durationSeconds: durationSeconds)
+    func updateReminder(
+        id: UUID,
+        title: String? = nil,
+        durationSeconds: Int? = nil,
+        targetDate: Date? = nil,
+        accent: AccentPreset? = nil
+    ) {
+        engine.updateReminder(
+            id: id,
+            title: title,
+            durationSeconds: durationSeconds,
+            targetDate: targetDate,
+            accent: accent
+        )
+        soundHaptics.performHaptic(.alignment, enabled: engine.settings.hapticsEnabled)
         statusBarController?.refreshStatusTitle()
+        refreshAlertPresentation()
     }
 
     func deleteReminder(id: UUID) {
@@ -309,6 +382,51 @@ final class AppCoordinator {
         }
     }
 
+    func updateAppleCalendarEnabled(_ enabled: Bool) async {
+        if enabled {
+            let granted = await remindersSync.requestCalendarAccess()
+            engine.updateSettings { $0.appleCalendarSyncEnabled = granted }
+        } else {
+            engine.updateSettings { $0.appleCalendarSyncEnabled = false }
+        }
+    }
+
+    func reconcileAppleSyncNow() async {
+        await engine.reconcileAllFromSyncProvider()
+        statusBarController?.refreshStatusTitle()
+        refreshAlertPresentation()
+    }
+
+    func requestIntentionalQuit() {
+        let unfinished = engine.activeOrPausedReminders.count + engine.triggeredQueue.count
+        guard unfinished > 0 && engine.settings.accountabilityWatchdogEnabled else {
+            NSApp.terminate(nil)
+            return
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Active Reminders Running (\(unfinished))"
+        alert.informativeText = "SpacedOut's watchdog restarts missed timers across Mac restarts and force-quits. You can remove timers now, or allow quitting until your next reboot."
+        alert.addButton(withTitle: "Keep Running")
+        alert.addButton(withTitle: "Quit Until Reboot")
+        alert.addButton(withTitle: "Remove Timers & Quit")
+
+        NSApp.activate(ignoringOtherApps: true)
+        switch alert.runModal() {
+        case .alertSecondButtonReturn:
+            watchdog.recordIntentionalQuitForCurrentBoot()
+            engine.recordWatchdogEvent("User quit with \(unfinished) active timer(s); armed to resume on reboot")
+            NSApp.terminate(nil)
+        case .alertThirdButtonReturn:
+            engine.removeAllActiveRemindersForQuit()
+            watchdog.syncState(armed: false)
+            NSApp.terminate(nil)
+        default:
+            break
+        }
+    }
+
     func exportICS() {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "SpacedOut-Reminders.ics"
@@ -325,6 +443,19 @@ final class AppCoordinator {
         try? content.write(to: url, atomically: true, encoding: .utf8)
     }
 
+    func exportActivityLog() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "SpacedOut-ActivityLog.txt"
+        panel.allowedContentTypes = [.plainText]
+        panel.canCreateDirectories = true
+
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let content = engine.exportActivityLogText()
+        try? content.write(to: url, atomically: true, encoding: .utf8)
+    }
+
     var currentAlertItem: ReminderItem? {
         testPreviewReminder ?? engine.triggeredQueue.first
     }
@@ -332,6 +463,14 @@ final class AppCoordinator {
     var activeAlertQueueCount: Int {
         if testPreviewReminder != nil { return 1 }
         return engine.triggeredQueue.count
+    }
+
+    private func handleTick() {
+        tickCounter &+= 1
+        evaluateTimersNow()
+        if tickCounter % 60 == 0 {
+            engine.touchLastSeen()
+        }
     }
 
     private func evaluateTimersNow() {
@@ -352,13 +491,24 @@ final class AppCoordinator {
             self.handleTriggeredBatch(triggered)
         }
 
+        engine.onRemindersChanged = { [weak self] in
+            guard let self else { return }
+            self.watchdog.syncState(armed: self.engine.shouldArmWatchdog)
+        }
+
         engine.onSettingsChanged = { [weak self] settings in
             guard let self else { return }
-            self.remindersSync.configureTargetList(settings.appleRemindersListName)
+            self.remindersSync.configure(
+                remindersEnabled: settings.appleRemindersSyncEnabled,
+                remindersListName: settings.appleRemindersListName,
+                calendarEnabled: settings.appleCalendarSyncEnabled,
+                calendarName: settings.appleCalendarName
+            )
             self.floatingWidgetController?.applySettings(settings)
             self.utilityWindowManager?.applyTheme(settings.themeMode)
             self.statusBarController?.applySettings(settings)
             self.applyActivationPolicy(showDockIcon: settings.showDockIcon)
+            self.watchdog.syncState(armed: self.engine.shouldArmWatchdog)
         }
     }
 
