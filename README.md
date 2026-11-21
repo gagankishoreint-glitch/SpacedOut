@@ -68,7 +68,13 @@ make run
 ```
 This runs `swift test`, compiles a release build, compiles `AppIcon.icon` into `Assets.car` and `AppIcon.icns` (with `Assets.xcassets` / `AppIcon.icns` fallbacks), assembles `dist/SpacedOut.app` with `Info.plist` and entitlements, ad-hoc signs it, and opens it.
 
-### 3. Open in Xcode
+### 3. Build a distributable `.dmg` disk image
+```bash
+make dmg
+```
+This builds and signs `dist/SpacedOut.app` and packages it with an `Applications` symlink into `dist/SpacedOut.dmg`.
+
+### 4. Open in Xcode
 - **Direct SwiftPM open:** `open Package.swift`
 - **Or generate a full `.xcodeproj` with XcodeGen** (`brew install xcodegen`):
   ```bash
