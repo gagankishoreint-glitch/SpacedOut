@@ -105,7 +105,17 @@ The application requests Reminders and Calendar permissions when those integrati
 - Xcode 15.3 or later
 - Swift 5.10 or later
 
-Clone the repository:
+Clone the repository and build:
 
 ```bash
-git clone
+git clone https://github.com/gagankishoreint-glitch/SpacedOut.git
+cd SpacedOut
+make dmg
+make run
+```
+
+If `swift test` fails with `no such module 'XCTest'`, make sure full Xcode (not just Command Line Tools) is selected:
+
+```bash
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+```
